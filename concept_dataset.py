@@ -31,7 +31,8 @@ if __name__ == '__main__':
             action = random.randint(0, 3)
         if info['lives'] != lives:
             lives = info['lives']
-            print("Lives:", lives)
+            if lives == 0:
+                print("New episode")
             action = 1 # automatically fire
         next_obs, reward, terminated, truncated, info = env.step(action)
         obs = next_obs
