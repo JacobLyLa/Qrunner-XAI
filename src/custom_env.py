@@ -7,11 +7,11 @@ from state_observer import StateObserverWrapper
 from utils import prepare_folders
 
 
-def make_env(seed, run_name, state_observer=False, render_mode="rgb_array", record_video=False):
+def make_env(seed, state_observer=False, render_mode="rgb_array", record_video=False):
     env = gym.make("BreakoutNoFrameskip-v4", render_mode=render_mode)
     if record_video:
-        prepare_folders(f"runs/{run_name}/videos")
-        env = gym.wrappers.RecordVideo(env, f"runs/{run_name}/videos")
+        prepare_folders(f"../runs/videos")
+        env = gym.wrappers.RecordVideo(env, f"../runs/videos")
     env = gym.wrappers.RecordEpisodeStatistics(env)
     env = gym.wrappers.AtariPreprocessing(
         env = env,

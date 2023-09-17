@@ -1,10 +1,7 @@
-import os
 import random
 import time
 from datetime import datetime
 
-import gymnasium as gym
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -14,7 +11,9 @@ from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
 from custom_env import make_env
+from utils import prepare_folders
 
+# TODO: add link to cleanRL
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -30,15 +29,12 @@ class QNetwork(nn.Module):
             nn.Linear(64 * 7 * 7, 512),
             nn.ReLU(),
             nn.Linear(512, 4), # 
-            #nn.Linear(512, 32),
-            #nn.ReLU(),
-            #nn.Linear(32, 4),
         )
 
     def forward(self, x):
         return self.network(x / 255.0) # TODO: needed? if trained like this, then CAV needs to use this aswell!
-        # return self.network(x.float())
 
+# Move this to utils alright
 def load_model(model_path):
     model = QNetwork()
     model.load_state_dict(torch.load(model_path))
@@ -51,26 +47,25 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 
 if __name__ == "__main__":
     # TODO: cleanup
-    seed = 1
+    seed = 0
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
     buffer_size = 1_000_000
     gamma = 0.99
     tau = 1.0
     learning_rate = 0.0001
-    total_timesteps = 10_000_000
+    total_timesteps = 10_100_000
+    learning_starts = 99_999 # after this step
+    save_points = [0, 10**(0.5), 10**(1), 10**(1.5), 10**(2), 10**(2.5), 10**(3), 10**(3.5), 10**(4), 10**(4.5), 10**(5), 10**(5.5), 10**(6), 10**(6.5), 10**(7)]
+    save_points = [int(x) for x in save_points]
     start_e = 1.0
     end_e = 0.01
     exploration_fraction = 0.1
     target_network_frequency = 1000
-    learning_starts = 100_000
     train_frequency = 4
     batch_size = 32
-    save_model = True
-    run_name = f"dqn_breakout/{date}"
+    run_name = str(date)
 
-    # create folders
-    os.makedirs(f"runs/{run_name}/models", exist_ok=True)
-    os.makedirs(f"runs/{run_name}/images", exist_ok=True)
+    prepare_folders(f"../runs/{run_name}/models")
 
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
@@ -102,7 +97,6 @@ if __name__ == "__main__":
     env = make_env(seed, run_name)
 
     q_network = QNetwork().to(device)
-    #q_network = load_model("runs/dqn_breakout/20230824-180025/models/model_9900000.pt").to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
     target_network = QNetwork().to(device)
     target_network.load_state_dict(q_network.state_dict())
@@ -143,7 +137,6 @@ if __name__ == "__main__":
         action = np.array([action]) # rb expects numpy array
         rb.add(obs, real_next_obs, action, reward, terminated, info)
 
-        # important
         obs = next_obs
 
         if global_step > learning_starts:
@@ -174,9 +167,11 @@ if __name__ == "__main__":
                         tau * q_network_param.data + (1.0 - tau) * target_network_param.data
                     )
 
-        if save_model and global_step > learning_starts:
-            if global_step % (total_timesteps // 20) == 0 or global_step == total_timesteps - 1:
-                model_path = f"runs/{run_name}/models/model_{global_step}.pt"
+        if global_step >= learning_starts:
+            training_steps = global_step - learning_starts
+            if training_steps in save_points:
+                model_path = f"../runs/{run_name}/models/model_{training_steps}.pt"
                 torch.save(q_network.state_dict(), model_path)
                 print(f"model saved to {model_path}")
     env.close()
+    print(f"num training steps done: {global_step}")

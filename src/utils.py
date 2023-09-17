@@ -10,6 +10,7 @@ def plot_obs(obs):
     '''
     plot greyscale observation with size 1x4x84x84
     convert to numpy and flatten image stacks
+    # TODO: should probably stack them horizontally
     '''
     np_obs = obs.detach().cpu().numpy().reshape(-1, 84)
     plt.imshow(np_obs, cmap='gray')
