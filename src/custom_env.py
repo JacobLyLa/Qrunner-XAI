@@ -3,11 +3,10 @@ import os
 import gymnasium as gym
 from stable_baselines3.common.atari_wrappers import ClipRewardEnv
 
-from state_observer import StateObserverWrapper
 from utils import prepare_folders
 
 
-def make_env(seed, state_observer=False, render_mode="rgb_array", record_video=False):
+def make_env(seed, state_observer=None, render_mode="rgb_array", record_video=False):
     env = gym.make("BreakoutNoFrameskip-v4", render_mode=render_mode)
     if record_video:
         prepare_folders(f"../runs/videos")
@@ -21,14 +20,15 @@ def make_env(seed, state_observer=False, render_mode="rgb_array", record_video=F
         terminal_on_life_loss = False,
         grayscale_obs = True,
         grayscale_newaxis = False,
-        scale_obs = False, # TODO: this with True requires much more VRAM.
-        # just divide by 255.0 in the network instead?
+        scale_obs = False,
     )
-    env = ClipRewardEnv(env) # TODO: why isnt this in atari preprocessing?
+    env = ClipRewardEnv(env) # TODO: needed?
+    # TODO max frames for agent
     env = gym.wrappers.FrameStack(env, 4)
-    env = gym.wrappers.AutoResetWrapper(env) # TODO: needed?
-    if state_observer:
-        env = StateObserverWrapper(env)
+    env = gym.wrappers.AutoResetWrapper(env)
+    if state_observer is not None:
+        env = state_observer(env)
+
     env.action_space.seed(seed)
 
     return env

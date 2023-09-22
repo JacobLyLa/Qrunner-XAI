@@ -1,5 +1,6 @@
 import os
 import matplotlib.pyplot as plt
+import torch
 
 def prepare_folders(folders_path):
     os.makedirs(folders_path, exist_ok=True)
@@ -12,6 +13,10 @@ def plot_obs(obs):
     convert to numpy and flatten image stacks
     # TODO: should probably stack them horizontally
     '''
-    np_obs = obs.detach().cpu().numpy().reshape(-1, 84)
-    plt.imshow(np_obs, cmap='gray')
+    # check if tensor
+    if type(obs) == torch.Tensor:
+        obs = obs.detach().cpu().numpy().reshape(-1, 84)
+    else:
+        obs = obs.reshape(-1, 84)
+    plt.imshow(obs, cmap='gray')
     plt.show()

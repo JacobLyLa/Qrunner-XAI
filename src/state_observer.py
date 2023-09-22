@@ -1,4 +1,5 @@
 import gymnasium as gym
+from concepts import Concept
 
 class StateObserverWrapper(gym.Wrapper):
     ram_map = {
@@ -6,7 +7,7 @@ class StateObserverWrapper(gym.Wrapper):
         'ball_y': 101,
         'player_x': 72,
         'bricks_hit_count': 77,
-        'bricks_map': range(30), # TODO: figure out mapping
+        'bricks_map': range(30), # TODO: figure out mapping?
         'score': 84,
     }
     def __init__(self, env: gym.Env):
@@ -38,10 +39,12 @@ class StateObserverWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
         obs, info = super().reset(**kwargs)
+        '''
         # reset env and also this entire wrapper (TODO: not needed?)
         concepts = self.concepts # remember concepts
         self = StateObserverWrapper(self.env) # reset self
         self.add_concepts(concepts) # add concepts again
+        '''
         return obs, info
 
     def step(self, action):
@@ -50,7 +53,6 @@ class StateObserverWrapper(gym.Wrapper):
         return self.observation, self.reward, self.termination, self.truncation, self.info
 
     def update_state(self):
-        # image can be directly read from env
         self.image = self.env.render()
 
         # read state variables from RAM
@@ -92,12 +94,14 @@ class StateObserverWrapper(gym.Wrapper):
         self.check_for_concepts()
 
     def check_for_concepts(self):
+        Concept.append_observation_image(self.observation, self.image)
         for concept in self.concepts:
             concept.check_observation(self.observation, self.state_variables, self.image)
 
     def save_concepts(self):
+        Concept.save_data()
         for concept in self.concepts:
-            concept.save_observations()
+            concept.save_concept_data()
 
     def add_concepts(self, concepts):
         self.concepts.extend(concepts)

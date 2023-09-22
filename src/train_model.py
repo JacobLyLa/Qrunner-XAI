@@ -1,3 +1,4 @@
+import math
 import random
 import time
 from datetime import datetime
@@ -13,7 +14,8 @@ from torch.utils.tensorboard import SummaryWriter
 from custom_env import make_env
 from utils import prepare_folders
 
-# TODO: add link to cleanRL
+# Inspired by:
+# https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -28,20 +30,20 @@ class QNetwork(nn.Module):
             nn.Flatten(),
             nn.Linear(64 * 7 * 7, 512),
             nn.ReLU(),
-            nn.Linear(512, 4), # 
+            nn.Linear(512, 4)
         )
 
     def forward(self, x):
-        return self.network(x / 255.0) # TODO: needed? if trained like this, then CAV needs to use this aswell!
+        return self.network(x / 255.0)
 
-# Move this to utils alright
+# TODO: move to utils
 def load_model(model_path):
     model = QNetwork()
     model.load_state_dict(torch.load(model_path))
     model.eval()
     return model
 
-def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
+def linear_schedule(start_e, end_e, duration, t):
     slope = (end_e - start_e) / duration
     return max(slope * t + start_e, end_e)
 
@@ -53,13 +55,17 @@ if __name__ == "__main__":
     gamma = 0.99
     tau = 1.0
     learning_rate = 0.0001
-    total_timesteps = 10_100_000
-    learning_starts = 99_999 # after this step
-    save_points = [0, 10**(0.5), 10**(1), 10**(1.5), 10**(2), 10**(2.5), 10**(3), 10**(3.5), 10**(4), 10**(4.5), 10**(5), 10**(5.5), 10**(6), 10**(6.5), 10**(7)]
-    save_points = [int(x) for x in save_points]
+    learning_starts = 100_000 # after this step
+    total_timesteps = 20_000_000 + learning_starts
+    num_checkpoints = 20
+    log_increment = math.log10(total_timesteps - learning_starts)
+    log_step_size = log_increment / (num_checkpoints-1)
+    save_points = [0] + [int(10**(log_step_size * i))-1 for i in range(1, num_checkpoints)]
+    print(save_points)
     start_e = 1.0
     end_e = 0.01
     exploration_fraction = 0.1
+    exploration_duration = 1_000_000
     target_network_frequency = 1000
     train_frequency = 4
     batch_size = 32
@@ -94,7 +100,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device:", device)
 
-    env = make_env(seed, run_name)
+    env = make_env(seed=seed)
 
     q_network = QNetwork().to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
@@ -115,7 +121,8 @@ if __name__ == "__main__":
     obs, info = env.reset(seed=seed)
     for global_step in range(total_timesteps):
         # action logic
-        epsilon = linear_schedule(start_e, end_e, exploration_fraction * total_timesteps, global_step)
+        # epsilon = linear_schedule(start_e, end_e, exploration_fraction * total_timesteps, global_step)
+        epsilon = linear_schedule(start_e, end_e, exploration_duration, global_step)
         if random.random() < epsilon:
             action = env.action_space.sample()
         else:
@@ -126,24 +133,22 @@ if __name__ == "__main__":
             action = q_values.argmax(dim=1).item()
 
         next_obs, reward, terminated, truncated, info = env.step(action)
-
-        # handle `final_observation'
-        real_next_obs = next_obs
-        if terminated:
-            real_next_obs = info["final_observation"]
+        
+        if terminated: # episode done
+            next_obs = info["final_observation"]
             writer.add_scalar("charts/episodic_return", info["final_info"]["episode"]["r"], global_step)
             writer.add_scalar("charts/episodic_length", info["final_info"]["episode"]["l"], global_step)
             writer.add_scalar("charts/epsilon", epsilon, global_step)
-        action = np.array([action]) # rb expects numpy array
-        rb.add(obs, real_next_obs, action, reward, terminated, info)
 
+        action = np.array([action]) # rb expects numpy array
+        rb.add(obs, next_obs, action, reward, terminated, info)
         obs = next_obs
 
         if global_step > learning_starts:
             if global_step % train_frequency == 0:
                 data = rb.sample(batch_size)
-                # TODO: simplify or understand better
                 with torch.no_grad():
+                    # TODO: simplify or understand better
                     target_max, _ = target_network(data.next_observations).max(dim=1)
                     td_target = data.rewards.flatten() + gamma * target_max * (1 - data.dones.flatten())
                 old_val = q_network(data.observations).gather(1, data.actions).squeeze()
@@ -154,11 +159,6 @@ if __name__ == "__main__":
                 loss.backward()
                 optimizer.step()
 
-            if global_step % 1000 == 0:
-                writer.add_scalar("losses/td_loss", loss, global_step)
-                writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
-                sps = int(global_step / (time.time() - start_time))
-                writer.add_scalar("charts/SPS", sps, global_step)
 
             # update target network
             if global_step % target_network_frequency == 0:
@@ -167,6 +167,14 @@ if __name__ == "__main__":
                         tau * q_network_param.data + (1.0 - tau) * target_network_param.data
                     )
 
+            # log losses
+            if global_step % 1000 == 0:
+                writer.add_scalar("losses/td_loss", loss, global_step)
+                writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
+                sps = int(global_step / (time.time() - start_time))
+                writer.add_scalar("charts/SPS", sps, global_step)
+            
+
         if global_step >= learning_starts:
             training_steps = global_step - learning_starts
             if training_steps in save_points:
@@ -174,4 +182,3 @@ if __name__ == "__main__":
                 torch.save(q_network.state_dict(), model_path)
                 print(f"model saved to {model_path}")
     env.close()
-    print(f"num training steps done: {global_step}")
