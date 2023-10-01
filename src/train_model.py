@@ -33,8 +33,16 @@ class QNetwork(nn.Module):
             nn.Linear(512, 4)
         )
 
-    def forward(self, x):
-        return self.network(x / 255.0)
+    def forward(self, x, return_acts=False):
+        x = x / 255.0
+        activations = {}
+        for name, layer in self.network.named_children():
+            x = layer(x)
+            if return_acts:
+                activations[name] = x.clone()
+        if return_acts:
+            return x, activations
+        return x
 
 # TODO: move to utils
 def load_model(model_path):
@@ -55,25 +63,24 @@ if __name__ == "__main__":
     gamma = 0.99
     tau = 1.0
     learning_rate = 0.0001
-    learning_starts = 100_000 # after this step
-    total_timesteps = 20_000_000 + learning_starts
+    learning_starts = 80_000 # after this step
+    total_timesteps = 10_000_000 + learning_starts
     num_checkpoints = 20
     log_increment = math.log10(total_timesteps - learning_starts)
     log_step_size = log_increment / (num_checkpoints-1)
-    save_points = [0] + [int(10**(log_step_size * i))-1 for i in range(1, num_checkpoints)]
+    save_points = [0] + [int(10**(log_step_size * i)) for i in range(1, num_checkpoints - 1)] + [total_timesteps - learning_starts]
     print(save_points)
     start_e = 1.0
     end_e = 0.01
-    exploration_fraction = 0.1
     exploration_duration = 1_000_000
     target_network_frequency = 1000
     train_frequency = 4
     batch_size = 32
     run_name = str(date)
+    model_path = f"../runs/{run_name}/models"
+    prepare_folders(model_path)
 
-    prepare_folders(f"../runs/{run_name}/models")
-
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(f"../runs/{run_name}")
     writer.add_text(
         "hyperparameters",
         f"buffer_size: {buffer_size}\n"
@@ -84,7 +91,6 @@ if __name__ == "__main__":
         f"total_timesteps: {total_timesteps}\n"
         f"start_e: {start_e}\n"
         f"end_e: {end_e}\n"
-        f"exploration_fraction: {exploration_fraction}\n"
         f"target_network_frequency: {target_network_frequency}\n"
         f"learning_starts: {learning_starts}\n"
         f"train_frequency: {train_frequency}\n"
@@ -121,7 +127,6 @@ if __name__ == "__main__":
     obs, info = env.reset(seed=seed)
     for global_step in range(total_timesteps):
         # action logic
-        # epsilon = linear_schedule(start_e, end_e, exploration_fraction * total_timesteps, global_step)
         epsilon = linear_schedule(start_e, end_e, exploration_duration, global_step)
         if random.random() < epsilon:
             action = env.action_space.sample()
@@ -178,7 +183,6 @@ if __name__ == "__main__":
         if global_step >= learning_starts:
             training_steps = global_step - learning_starts
             if training_steps in save_points:
-                model_path = f"../runs/{run_name}/models/model_{training_steps}.pt"
-                torch.save(q_network.state_dict(), model_path)
-                print(f"model saved to {model_path}")
+                torch.save(q_network.state_dict(), model_path + f"/model_{training_steps}.pt")
+                print(f"saved model: {training_steps}")
     env.close()
