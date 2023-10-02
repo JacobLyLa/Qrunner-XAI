@@ -19,7 +19,9 @@ class Concept:
         self.path = f"../concepts/{name}"
 
     def prepare_data(self, game_steps, test_ratio=0.2, max_size=None):
-        if max_size is None:
+        # shuffle game steps
+        random.shuffle(game_steps)
+        if not max_size:
             max_size = len(game_steps)
         presence = []
         absence = []
@@ -34,6 +36,7 @@ class Concept:
             if min_length == 0:
                 print(f"Concept {self.name} has 0 instances of one class.")
                 return
+            # TODO: balance data so 50% in train and test
             presence = random.sample(presence, min_length)
             absence = random.sample(absence, min_length)
             game_steps = presence + absence
@@ -58,11 +61,3 @@ class Concept:
         self.images_test = np.array([game_step.image for game_step in data_test])[:test_size]
         self.values_train = np.array(y_train)[:train_size]
         self.values_test = np.array(y_test)[:test_size]
-
-        '''
-        if not self.binary:
-            # divide values by train std
-            std = np.std(self.values_train)
-            self.values_train = self.values_train.astype(float) / std
-            self.values_test = self.values_test.astype(float) / std
-        '''

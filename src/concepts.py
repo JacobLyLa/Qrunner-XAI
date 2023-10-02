@@ -11,9 +11,9 @@ def frames_until_collision_vertical(state_variables):
         print("ball_vy is 0")
         return 0
     if ball_vy > 0: # check when it hits paddle @ 185
-        return (185-ball_y) / ball_vy
+        return max((185-ball_y), 0) / ball_vy
     else: # check when it hits top (bottom row of bricks) @ 100
-        return (ball_y-100) / ball_vy
+        return max((ball_y-100), 0) / abs(ball_vy)
 
 
 def frames_until_collision_horizontal(state_variables):
@@ -22,10 +22,10 @@ def frames_until_collision_horizontal(state_variables):
     if ball_vx == 0:
         print("ball_vx is 0")
         return 0
-    if ball_vx > 0: # check when it hits right wall @ 159
-        return (149-ball_x) / ball_vx
+    if ball_vx > 0: # check when it hits right wall @ 149
+        return max((149-ball_x), 0) / ball_vx
     else: # check when it hits left wall @ 11
-        return (ball_x-11) / ball_vx
+        return max((ball_x-11), 0) / abs(ball_vx)
 
 concept_instances = [
     Concept(name="random (b)", binary=True,
@@ -56,7 +56,6 @@ concept_instances = [
     value_function=lambda state_variables: 
         state_variables['ball_y'] > 150,
     ),
-
 
     Concept(name="ball left paddle (b)", binary=True,
     value_function=lambda state_variables: 
