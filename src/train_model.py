@@ -14,6 +14,9 @@ from torch.utils.tensorboard import SummaryWriter
 from custom_env import make_env
 from utils import prepare_folders
 
+
+# TODO: seperate into 2 files
+
 # Inspired by:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
 
@@ -36,9 +39,9 @@ class QNetwork(nn.Module):
     def forward(self, x, return_acts=False):
         x = x / 255.0
         activations = {}
-        for name, layer in self.network.named_children():
+        for idx, (name, layer) in enumerate(self.network.named_children()):
             x = layer(x)
-            if return_acts:
+            if return_acts and not isinstance(layer, nn.Flatten) and idx < len(self.network) - 1:
                 activations[name] = x.clone()
         if return_acts:
             return x, activations

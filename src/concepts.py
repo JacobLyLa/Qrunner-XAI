@@ -67,6 +67,11 @@ concept_instances = [
         state_variables['ball_x'] > state_variables['paddle_x'],
     ),
 
+    Concept(name="ball same x paddle (b)", binary=True,
+    value_function=lambda state_variables: 
+        abs(state_variables['ball_x'] - state_variables['paddle_x']) < 10,
+    ),
+
     Concept(name="ball distance paddle", binary=False,
     value_function=lambda state_variables: 
         math.sqrt(

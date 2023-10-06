@@ -45,6 +45,9 @@ class Concept:
         else:
             for game_step in game_steps:
                 values.append(self.value_function(game_step.state_variables))
+            # divide by standard deviation
+            values = np.array(values)
+            values = values / np.std(values)
 
         # split data into train and test
         data_train, data_test, y_train, y_test = train_test_split(
