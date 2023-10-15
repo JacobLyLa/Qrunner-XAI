@@ -17,7 +17,11 @@ class GameStep:
     def __eq__(self, other):
         return np.array_equal(self.observation, other.observation)
 
+# TODO: ability to add state variables in different game steps
+# e.g for a game step > 10, add ball_x_after_10_steps
+
 class GameStepSaverWrapper(gym.Wrapper):
+    # RAM map used from
     # https://github.com/mila-iqia/atari-representation-learning/blob/master/atariari/benchmark/ram_annotations.py
     ram_map = {
         'ball_x': 99,
@@ -98,8 +102,12 @@ class GameStepSaverWrapper(gym.Wrapper):
             weird = True
         if abs(ball_vx) > 10 or abs(ball_vy) > 10:
             weird = True
-        if not weird and self.step_counter % self.save_interval == 0:
-            self.game_steps.append(GameStep(self.observation, self.env.render(), self.state_variables))
+
+        if not weird:
+            # to get more data when there is a collision or reward
+            special_case = self.state_variables['collision'] or self.state_variables['reward']
+            if self.step_counter % self.save_interval == 0 or special_case:
+                self.game_steps.append(GameStep(self.observation, self.env.render(), self.state_variables))
 
         # for debugging
         self.env.state_variables = self.state_variables

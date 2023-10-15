@@ -7,7 +7,6 @@ from gymnasium.utils.play import play
 
 from custom_env import make_env
 from game_step_saver import GameStepSaverWrapper
-from train_model import load_model
 
 
 def renderOverrider(env):

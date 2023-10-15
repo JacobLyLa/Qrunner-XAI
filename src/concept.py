@@ -29,6 +29,7 @@ class Concept:
                 break
 
         if not sufficent:
+            print(f"Concept: {self.name}, dataset size: {2 * min_length}")
             # update train_size and test_size to maximum and same ratio
             ratio = train_size / (train_size + test_size)
             total_data = 2*min_length
@@ -36,7 +37,6 @@ class Concept:
             test_size = total_data - train_size
 
         # cut off the longer list to make them equal length
-        print(f"Concept: {self.name}, min_length: {min_length}")
         if min_length == 0:
             assert False, "No data for concept"
         presence = random.sample(presence, min_length)
@@ -65,7 +65,6 @@ class Concept:
 
         # scale by standard deviation to use similar regularization for all concepts
         values = np.array(values)
-        print(np.std(values))
         values = values / np.std(values)
 
         # split the data
