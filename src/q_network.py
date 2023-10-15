@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-# Inspired by:
+# Architecture from:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
 
 class QNetwork(nn.Module):
@@ -22,9 +22,6 @@ class QNetwork(nn.Module):
 
         if model_path is not None:
             self.load_state_dict(torch.load(model_path))
-            self.eval() # TODO: dont use here
-
-        self.activation_shapes = self._get_activation_shapes()
 
     def forward(self, x, return_acts=False):
         x = x / 255.0
@@ -36,12 +33,3 @@ class QNetwork(nn.Module):
         if return_acts:
             return x, activations
         return x
-
-    def _get_activation_shapes(self):
-        torch.zeros((1, 4, 84, 84))
-        activation_shapes = {}
-        for idx, (name, layer) in enumerate(self.network.named_children()):
-            x = layer(x)
-            if not isinstance(layer, nn.Flatten) and idx < len(self.network) - 1:
-                activation_shapes[name] = x.shape
-        return activation_shapes

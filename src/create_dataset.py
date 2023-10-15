@@ -4,21 +4,21 @@ import numpy as np
 import torch
 
 from custom_env import make_env
-from train_model import load_model
+from utils import load_q_network_device
 
 if __name__ == '__main__':
+    seed = 0
+
     play_iterations = 50_000
     num_data_points = 10_000
-    seed = 0
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    q_network = load_model("../runs/20230927-233906/models/model_9999999.pt").to(device)
+    q_network, device = load_q_network_device()
 
-    env = make_env(random.randint(1,100000), save_interval=play_iterations//num_data_points)
+    env = make_env(seed, save_interval=play_iterations//num_data_points)
     obs, info = env.reset(seed=seed)
     for i in range(play_iterations):
         if i % 1000 == 0:
