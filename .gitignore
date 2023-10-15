@@ -20,4 +20,4 @@ events.out.tfevents.*
 *.mp4
 
 # Ignore pickle files
-*.pkl
+*.pickle
