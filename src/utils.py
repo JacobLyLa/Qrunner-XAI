@@ -1,22 +1,23 @@
 import os
+import pickle
+
 import matplotlib.pyplot as plt
 import torch
+
+from q_network import QNetwork
+
 
 def prepare_folders(folders_path):
     os.makedirs(folders_path, exist_ok=True)
     for file in os.listdir(folders_path):
         os.remove(f"{folders_path}/{file}")
 
-def plot_obs(obs):
-    '''
-    plot greyscale observation with size 1x4x84x84
-    convert to numpy and flatten image stacks
-    # TODO: should probably stack them horizontally
-    '''
-    # check if tensor
-    if type(obs) == torch.Tensor:
-        obs = obs.detach().cpu().numpy().reshape(-1, 84)
-    else:
-        obs = obs.reshape(-1, 84)
-    plt.imshow(obs, cmap='gray')
-    plt.show()
+def load_data():
+    with open('../data/game_steps.pickle', 'rb') as f:
+        game_steps = pickle.load(f)
+    return game_steps
+
+def load_q_network_device(model_path="../runs/20230927-233906/models/model_9999999.pt"):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    q_network = QNetwork(model_path).to(device).eval()
+    return q_network, device
