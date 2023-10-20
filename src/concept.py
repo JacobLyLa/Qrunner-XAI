@@ -51,12 +51,12 @@ class Concept:
         presence_test = presence[class_train_size:class_train_size + class_test_size]
         absence_test = absence[class_train_size:class_train_size + class_test_size]
 
-        data_train = presence_train + absence_train
-        data_test = presence_test + absence_test
+        train_data = presence_train + absence_train
+        test_data = presence_test + absence_test
         y_train = [1]*len(presence_train) + [0]*len(absence_train)
         y_test = [1]*len(presence_test) + [0]*len(absence_test)
 
-        return data_train, data_test, y_train, y_test
+        return train_data, test_data, y_train, y_test
 
     def _prepare_non_binary_data(self, game_steps, train_size, test_size):        
         values = []
@@ -69,12 +69,12 @@ class Concept:
 
         # split the data
         game_steps = game_steps[:train_size + test_size]
-        data_train = game_steps[:train_size]
-        data_test = game_steps[train_size:]
+        train_data = game_steps[:train_size]
+        test_data = game_steps[train_size:]
         y_train = values[:train_size]
         y_test = values[train_size:]
 
-        return data_train, data_test, y_train, y_test
+        return train_data, test_data, y_train, y_test
 
     def prepare_data(self, game_steps, test_ratio=0.2, max_size=None):
         if not max_size:
@@ -85,18 +85,18 @@ class Concept:
 
         np.random.shuffle(game_steps)
         if self.binary:
-            data_train, data_test, y_train, y_test = self._prepare_binary_data(game_steps, train_size, test_size)
+            train_data, test_data, y_train, y_test = self._prepare_binary_data(game_steps, train_size, test_size)
         else:
-            data_train, data_test, y_train, y_test = self._prepare_non_binary_data(game_steps, train_size, test_size)
+            train_data, test_data, y_train, y_test = self._prepare_non_binary_data(game_steps, train_size, test_size)
 
-        self.data_train = np.array(data_train) # can be used for forcing autoencoder to learn ball position
-        self.data_test = np.array(data_test) # can be used for sorting
-        self.obs_train = np.array([game_step.observation for game_step in data_train])
-        self.obs_test = np.array([game_step.observation for game_step in data_test])
-        self.images_train = np.array([game_step.image for game_step in data_train])
-        self.images_test = np.array([game_step.image for game_step in data_test])
-        self.values_train = np.array(y_train)
-        self.values_test = np.array(y_test)
+        self.train_data = np.array(train_data) # can be used for forcing autoencoder to learn ball position
+        self.test_data = np.array(test_data) # can be used for sorting
+        self.train_obs = np.array([game_step.observation for game_step in train_data])
+        self.test_obs = np.array([game_step.observation for game_step in test_data])
+        self.train_images = np.array([game_step.image for game_step in train_data])
+        self.test_images = np.array([game_step.image for game_step in test_data])
+        self.train_values = np.array(y_train)
+        self.test_values = np.array(y_test)
 
 if __name__ == "__main__":
     from concepts import concept_instances
@@ -108,15 +108,15 @@ if __name__ == "__main__":
     concept.prepare_data(data, max_size=500)
 
     # check if data is balanced
-    print(f"Train Mean: {np.mean(concept.values_train)}")
-    print(f"Test Mean: {np.mean(concept.values_test)}")
+    print(f"Train Mean: {np.mean(concept.train_values)}")
+    print(f"Test Mean: {np.mean(concept.test_values)}")
 
     # check shapes of all data
-    print(concept.data_train.shape)
-    print(concept.data_test.shape)
-    print(concept.obs_train.shape)
-    print(concept.obs_test.shape)
-    print(concept.images_train.shape)
-    print(concept.images_test.shape)
-    print(concept.values_train.shape)
-    print(concept.values_test.shape)
+    print(concept.train_data.shape)
+    print(concept.test_data.shape)
+    print(concept.train_obs.shape)
+    print(concept.test_obs.shape)
+    print(concept.train_images.shape)
+    print(concept.test_images.shape)
+    print(concept.train_values.shape)
+    print(concept.test_values.shape)
