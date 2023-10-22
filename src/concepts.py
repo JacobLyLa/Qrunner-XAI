@@ -3,6 +3,8 @@ import random
 
 from concept import Concept
 
+# TODO: 
+# does paddle size decrease after hitting top wall???
 
 def frames_until_collision_vertical(state_variables):
     ball_y = state_variables['ball_y']

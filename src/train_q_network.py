@@ -170,7 +170,7 @@ if __name__ == "__main__":
             # Log losses
             if global_step % 1000 == 0:
                 writer.add_scalar("losses/td_loss", loss, global_step)
-                writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
+                writer.add_scalar("losses/q_values", action_q_values.mean(), global_step)
                 sps = int(global_step / (time.time() - start_time))
                 writer.add_scalar("charts/SPS", sps, global_step)
             

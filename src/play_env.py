@@ -49,6 +49,6 @@ def renderOverrider(env):
 
 if __name__ == '__main__':
     env = make_env(0, save_interval=99999999)
-    env.render = renderOverrider(env)
-    play(env, fps=3, zoom=3)
+    # env.render = renderOverrider(env)
+    play(env, fps=30, zoom=3)
     env.close()

@@ -6,7 +6,10 @@ import torch
 from custom_env import make_env
 from utils import load_q_network_device
 
+# TODO: run on CPU
+
 if __name__ == '__main__':
+    human = False
     seed = 0
 
     play_iterations = 50_000
@@ -17,15 +20,17 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
 
     q_network, device = load_q_network_device()
-
-    env = make_env(seed, save_interval=play_iterations//num_data_points)
+    if human:
+        env = make_env(seed, render_mode="human")
+    else:
+        env = make_env(seed, save_interval=play_iterations//num_data_points)
     obs, info = env.reset(seed=seed)
     for i in range(play_iterations):
         if i % 1000 == 0:
             print(i)
         # action by random
         if random.random() < 0.01:
-            action = random.randint(0, 3)
+            action = random.randint(0, 3) # dependent of game
 
         # action by model
         else:

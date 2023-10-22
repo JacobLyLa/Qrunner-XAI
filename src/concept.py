@@ -29,7 +29,6 @@ class Concept:
                 break
 
         if not sufficent:
-            print(f"Concept: {self.name}, dataset size: {2 * min_length}")
             # update train_size and test_size to maximum and same ratio
             ratio = train_size / (train_size + test_size)
             total_data = 2*min_length
@@ -100,10 +99,10 @@ class Concept:
 
 if __name__ == "__main__":
     from concepts import concept_instances
-    from utils import load_data
+    from utils import load_game_data
 
     concept = concept_instances['ball distance paddle']
-    data = load_data()
+    game_data = load_game_data()
     print(f"Data size: {len(data)}")
     concept.prepare_data(data, max_size=500)
 

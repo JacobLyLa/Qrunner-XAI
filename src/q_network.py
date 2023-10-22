@@ -17,7 +17,7 @@ class QNetwork(nn.Module):
             nn.Flatten(),
             nn.Linear(64 * 7 * 7, 512),
             nn.ReLU(),
-            nn.Linear(512, 4)
+            nn.Linear(512, 4) # edit per game
         )
 
         if model_path is not None:
@@ -28,8 +28,8 @@ class QNetwork(nn.Module):
         activations = {}
         for idx, (name, layer) in enumerate(self.network.named_children()):
             x = layer(x)
-            if return_acts and not isinstance(layer, nn.Flatten) and idx < len(self.network) - 1:
-                activations[name] = x.clone()
+            if return_acts and idx < len(self.network) - 1:
+                activations[name] = x.clone().detach()
         if return_acts:
             return x, activations
         return x
