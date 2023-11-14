@@ -12,7 +12,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 from custom_env import make_env
 from q_network import QNetwork
-from utils import prepare_folders
 
 # Inspired by:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
@@ -59,7 +58,6 @@ if __name__ == "__main__":
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_name = str(date)
     model_path = f"../runs/{run_name}/models"
-    prepare_folders(model_path)
 
     writer = SummaryWriter(f"../runs/{run_name}")
     writer.add_text(

@@ -6,9 +6,6 @@ import torch
 
 from q_network import QNetwork
 
-def prepare_folders(folders_path):
-    os.makedirs(folders_path, exist_ok=True)
-
 def load_game_data():
     with open('../data/game_steps.pickle', 'rb') as f:
         game_steps = pickle.load(f)

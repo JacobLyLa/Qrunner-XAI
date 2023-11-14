@@ -2,8 +2,6 @@ import random
 
 import numpy as np
 
-from utils import prepare_folders
-
 
 class Concept:
     def __init__(self, name, binary, value_function):

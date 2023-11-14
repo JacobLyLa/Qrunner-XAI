@@ -4,8 +4,6 @@ import random
 import gymnasium as gym
 import numpy as np
 
-from utils import prepare_folders
-
 
 class GameStep:
     def __init__(self, observation, image, state_variables):
@@ -120,6 +118,5 @@ class GameStepSaverWrapper(gym.Wrapper):
                 seen.add(state_identifier)
 
         print(f"Saving {len(unique_game_steps)} unique game steps")
-        prepare_folders(f"../data")
         with open('../data/game_steps.pickle', 'wb') as f:
             pickle.dump(unique_game_steps, f)
