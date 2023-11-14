@@ -1,12 +1,17 @@
 import copy
+import warnings
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn import linear_model
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.metrics import accuracy_score, r2_score
 from torch.utils.data import DataLoader, TensorDataset
-from torcheval.metrics.functional import r2_score
+from torcheval.metrics.functional import r2_score as r2_score_torch
 
+warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
 def binary_score(preds, y):
     preds = preds > 0.5
@@ -15,21 +20,20 @@ def binary_score(preds, y):
     return 2*acc-1
 
 def validate_probe(preds, y, binary):
-    score = binary_score(preds, y) if binary else r2_score(preds, y)
+    score = binary_score(preds, y) if binary else r2_score_torch(preds, y)
     return score.cpu().item()
 
-def create_data(game_data, model, concept):
-    concept.prepare_data(game_data)
+def create_data(model, concept):
     train_obs = torch.tensor(concept.train_obs.copy()).float()
     test_obs = torch.tensor(concept.test_obs.copy()).float()
-    t_max = train_obs.max()
+    input_mean = train_obs.mean()
     _, acts_dict_train = model(train_obs, return_acts=True)
     _, acts_dict_test = model(test_obs, return_acts=True)
     acts_dict_train_test = {}
     for k in acts_dict_train.keys():
         acts_dict_train_test[k] = {'train_acts': acts_dict_train[k], 'test_acts': acts_dict_test[k]}
     # Include original observation data
-    acts_dict_train_test['obs'] = {'train_acts': train_obs/t_max, 'test_acts': test_obs/t_max}
+    acts_dict_train_test['obs'] = {'train_acts': train_obs/input_mean, 'test_acts': test_obs/input_mean}
 
     # Add concept values
     train_values = torch.tensor(concept.train_values, dtype=torch.float32)
@@ -51,7 +55,6 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
         probe = nn.Sequential(nn.Flatten(), nn.Linear(num_activation_inputs, 1), nn.Sigmoid())
     else:
         probe = nn.Sequential(nn.Flatten(), nn.Linear(num_activation_inputs, 1))
-    #probe.to(device)
     optimizer = optim.Adam(probe.parameters(), lr=hyperparams['lr'])
     loss_fn = nn.MSELoss()
 
@@ -60,15 +63,10 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
     best_probe = None  # Variable to store the best probe
     epochs_without_improvement = 0
 
-    log = ""
-
     for epoch in range(hyperparams['epochs']):
         probe.train()
         total_train_loss = 0.0
         for batch_obs, batch_values in train_loader:
-            #batch_obs = batch_obs.to(device)
-            #batch_values = batch_values.to(device)
-
             optimizer.zero_grad()
             outputs = probe(batch_obs)
             loss = loss_fn(outputs.squeeze(1), batch_values)
@@ -89,9 +87,6 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
 
         with torch.no_grad():
             for batch_obs, batch_values in test_loader:
-                #batch_obs = batch_obs.to(device)
-                #batch_values = batch_values.to(device)
-
                 outputs = probe(batch_obs)
                 loss = loss_fn(outputs.squeeze(1), batch_values)
                 
@@ -100,7 +95,7 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
                 scores.append(validate_probe(outputs.squeeze(1), batch_values, binary))
         score = np.mean(scores)
 
-        log += f"Epoch {epoch+1}/{hyperparams['epochs']} - Train loss: {total_train_loss/len(train_loader):.4f} - Test loss: {total_test_loss/len(test_loader):.4f} - Test score: {score:.4f}\n"
+        #print(f"Epoch {epoch+1}/{hyperparams['epochs']} - Train loss: {total_train_loss/len(train_loader):.4f} - Test loss: {total_test_loss/len(test_loader):.4f} - Test score: {score:.4f}")
 
         # Early stopping
         if score > best_test_score:
@@ -113,28 +108,22 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
             epochs_without_improvement += 1
             if epochs_without_improvement >= hyperparams['patience']:
                 break
-
-    #if score < 0.3:
-    #    print(log)
-
     return best_probe, best_test_score  # Return the best probe and the best score
 
 
-def train_probe(game_data, model, concept, layer, hyperparams):
-    acts_dict_train_test, train_values, test_values = create_data(game_data, model, concept)
+def train_probe(model, concept, layer, hyperparams):
+    acts_dict_train_test, train_values, test_values = create_data(model, concept)
     train_acts = acts_dict_train_test[layer]['train_acts']
     test_acts = acts_dict_train_test[layer]['test_acts']
     probe, score = _train_probe(concept.binary, hyperparams, train_acts, test_acts, train_values, test_values)
-    #print(f"Layer {layer} - Score: {score:.4f}")
     return probe, score
 
-def train_probes(game_data, model, concept, hyperparams):
-    acts_dict_train_test, train_values, test_values = create_data(game_data, model, concept) # Reuse for same concept but different layers
+def train_probes(model, concept, hyperparams):
+    acts_dict_train_test, train_values, test_values = create_data(model, concept) # Reuse for same concept but different layers
     layer_scores = {}
     for layer in acts_dict_train_test.keys():
         train_acts = acts_dict_train_test[layer]['train_acts']
         test_acts = acts_dict_train_test[layer]['test_acts']
         probe, score = _train_probe(concept.binary, hyperparams, train_acts, test_acts, train_values, test_values)
         layer_scores[layer] = score
-        #print(f"Layer {layer} - Score: {score:.4f}")
     return layer_scores
