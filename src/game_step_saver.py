@@ -14,12 +14,7 @@ class GameStep:
             self.image = image.copy()
         self.state_variables = state_variables.copy()
 
-    def __eq__(self, other):
-        return np.array_equal(self.observation, other.observation)
-
-# TODO: ability to add state variables in different game steps
-# e.g for a game step > 10, add ball_x_after_10_steps
-
+# rename to state recorder?
 class GameStepSaverWrapper(gym.Wrapper):
     # RAM map used from
     # https://github.com/mila-iqia/atari-representation-learning/blob/master/atariari/benchmark/ram_annotations.py
@@ -31,23 +26,22 @@ class GameStepSaverWrapper(gym.Wrapper):
     def __init__(self, env, save_interval):
         gym.Wrapper.__init__(self, env)
         self.env.state_variables = None
-        # the main purpose of this class is to save the game steps
         self.game_steps = []
         self.save_interval = save_interval
         self.step_counter = 0
         self.episode_frame_number = 0
 
         self.state_variables = {
-            'game_steps': 0,
             'ball_x': 0,
             'ball_y': 0,
             'ball_vx': 0,
             'ball_vy': 0,
             'paddle_x': 0,
             'lives': 1,
+            'losing life': False,
             'bricks_hit': 0,
             'collision': False,
-            'reward': False,
+            'brick_hit': False,
         }
 
     def get_ram_value(self, variable_name):
@@ -62,9 +56,13 @@ class GameStepSaverWrapper(gym.Wrapper):
         paddle_x = self.get_ram_value('paddle_x') - 39
         lives = self.env.unwrapped.ale.lives()
 
+        if ball_y >= 194:
+            losing_life = True
+        else:
+            losing_life = False
+
         # check if new episode
         if self.info['episode_frame_number'] < self.episode_frame_number:
-            self.state_variables['game_steps'] = 0
             self.state_variables['bricks_hit'] = 0
         self.episode_frame_number = self.info['episode_frame_number']
 
@@ -75,14 +73,9 @@ class GameStepSaverWrapper(gym.Wrapper):
         collision = False
         if ball_vx != self.state_variables['ball_vx'] or ball_vy != self.state_variables['ball_vy']:
             # velocity will change for 2 consecutive frames, but only register the first frame
-            if not collision:
+            if not self.state_variables['collision']:
                 collision = True
 
-        # for debugging
-        if self.reward and not collision:
-            print("Reward without collision??")
-
-        self.state_variables['game_steps'] += 1
         self.state_variables['lives'] = lives
         self.state_variables['ball_x'] = ball_x
         self.state_variables['ball_y'] = ball_y
@@ -90,8 +83,9 @@ class GameStepSaverWrapper(gym.Wrapper):
         self.state_variables['ball_vx'] = ball_vx
         self.state_variables['ball_vy'] = ball_vy
         self.state_variables['collision'] = collision
-        self.state_variables['reward'] = self.reward
+        self.state_variables['brick_hit'] = self.reward > 0
         self.state_variables['bricks_hit'] += self.reward > 0
+        self.state_variables['losing life'] = losing_life
 
         self.step_counter += 1
         # if measurements are weird then ball just spawned or is unfired
@@ -104,9 +98,8 @@ class GameStepSaverWrapper(gym.Wrapper):
             weird = True
 
         if not weird:
-            # to get more data when there is a collision or reward
-            special_case = self.state_variables['collision'] or self.state_variables['reward']
-            if self.step_counter % self.save_interval == 0 or special_case:
+            # to get more special data save all collisions
+            if self.step_counter % self.save_interval == 0 or self.state_variables['collision'] or losing_life:
                 self.game_steps.append(GameStep(self.observation, self.env.render(), self.state_variables))
 
         # for debugging
@@ -115,12 +108,17 @@ class GameStepSaverWrapper(gym.Wrapper):
         return self.observation, self.reward, self.termination, self.truncation, self.info
 
     def save_data(self):
-        print(f"{len(self.game_steps)} game steps")
-        # filter out duplicate observations
+        print(f"Filtering {len(self.game_steps)} game steps...")
         unique_game_steps = []
+        seen = set()
+
         for game_step in self.game_steps:
-            if game_step not in unique_game_steps:
+            # Create a frozenset of the state variables
+            state_identifier = frozenset(game_step.state_variables.items())
+            if state_identifier not in seen:
                 unique_game_steps.append(game_step)
+                seen.add(state_identifier)
+
         print(f"Saving {len(unique_game_steps)} unique game steps")
         prepare_folders(f"../data")
         with open('../data/game_steps.pickle', 'wb') as f:

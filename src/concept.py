@@ -1,7 +1,6 @@
 import random
 
 import numpy as np
-from sklearn.model_selection import train_test_split
 
 from utils import prepare_folders
 
@@ -76,7 +75,7 @@ class Concept:
         return train_data, test_data, y_train, y_test
 
     def prepare_data(self, game_steps, test_ratio=0.2, max_size=None):
-        if not max_size:
+        if not max_size or max_size > len(game_steps):
             max_size = len(game_steps)
 
         train_size = int(max_size*(1-test_ratio))
@@ -96,26 +95,3 @@ class Concept:
         self.test_images = np.array([game_step.image for game_step in test_data])
         self.train_values = np.array(y_train)
         self.test_values = np.array(y_test)
-
-if __name__ == "__main__":
-    from concepts import concept_instances
-    from utils import load_game_data
-
-    concept = concept_instances['ball distance paddle']
-    game_data = load_game_data()
-    print(f"Data size: {len(data)}")
-    concept.prepare_data(data, max_size=500)
-
-    # check if data is balanced
-    print(f"Train Mean: {np.mean(concept.train_values)}")
-    print(f"Test Mean: {np.mean(concept.test_values)}")
-
-    # check shapes of all data
-    print(concept.train_data.shape)
-    print(concept.test_data.shape)
-    print(concept.train_obs.shape)
-    print(concept.test_obs.shape)
-    print(concept.train_images.shape)
-    print(concept.test_images.shape)
-    print(concept.train_values.shape)
-    print(concept.test_values.shape)

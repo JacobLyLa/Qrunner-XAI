@@ -17,7 +17,7 @@ class QNetwork(nn.Module):
             nn.Flatten(),
             nn.Linear(64 * 7 * 7, 512),
             nn.ReLU(),
-            nn.Linear(512, 4) # edit per game
+            nn.Linear(512, 4)
         )
 
         if model_path is not None:

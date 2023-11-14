@@ -41,7 +41,7 @@ if __name__ == "__main__":
     learning_rate = 0.0001
     learning_starts = 80_000 # Exclusive
     total_timesteps = 10_000_000 + learning_starts
-    num_checkpoints = 20
+    num_checkpoints = 10
     start_e = 1.0
     end_e = 0.01
     exploration_duration = 1_000_000
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     obs, info = env.reset(seed=seed)
 
     start_time = time.time()
-    for global_step in range(total_timesteps):
+    for global_step in range(total_timesteps + 1):
         # Determine action
         epsilon = ls.step()
         if random.random() < epsilon:
@@ -119,17 +119,19 @@ if __name__ == "__main__":
 
         # Take action
         next_obs, reward, terminated, truncated, info = env.step(action)
-        
-        # Log episode stats
-        if terminated:
-            next_obs = info["final_observation"]
-            writer.add_scalar("charts/episodic_return", info["final_info"]["episode"]["r"], global_step)
-            writer.add_scalar("charts/episodic_length", info["final_info"]["episode"]["l"], global_step)
+
+        # Record end of episode stats
+        if "episode" in info:
+            print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+            writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
             writer.add_scalar("charts/epsilon", epsilon, global_step)
 
-        # Add to replay buffer and update observation
-        action = np.array([action]) # rb expects numpy array
-        rb.add(obs, next_obs, action, reward, terminated, info)
+        # Handle truncated episodes
+        real_next_obs = next_obs
+        if truncated:
+            real_next_obs = info["final_observation"]
+        rb.add(obs, real_next_obs, np.array([action]), reward, terminated, info)
         obs = next_obs
 
         # Possibly train
@@ -167,7 +169,7 @@ if __name__ == "__main__":
                         tau * q_network_param.data + (1.0 - tau) * target_network_param.data
                     )
 
-            # Log losses
+            # Log non-episodic metrics
             if global_step % 1000 == 0:
                 writer.add_scalar("losses/td_loss", loss, global_step)
                 writer.add_scalar("losses/q_values", action_q_values.mean(), global_step)
