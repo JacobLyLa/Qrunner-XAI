@@ -3,10 +3,9 @@ import sys
 
 import gymnasium as gym
 import numpy as np
-from gymnasium.utils.play import play
-
 from custom_env import make_env
 from game_step_saver import GameStepSaverWrapper
+from gymnasium.utils.play import play
 
 
 def renderOverrider(env):
@@ -15,16 +14,17 @@ def renderOverrider(env):
         rendered = env.original_render()
         state_variables = env.state_variables
         if state_variables:
-            if state_variables['collision']:
-                print("Collision:", state_variables['ball_x'], state_variables['ball_y'])
+            print(state_variables)
+            #if state_variables['collision']:
+            #    print("Collision:", state_variables['ball_x'], state_variables['ball_y'])
             # print state variables
             string = ""
             for key, value in state_variables.items():
                 if key == 'bricks_map':
                     continue
                 string += f"{key}: {value} "
-            sys.stdout.write(f"\r{string}")
-            sys.stdout.flush()
+            #sys.stdout.write(f"\r{string}")
+            #sys.stdout.flush()
 
             # draw ball
             ball_x = state_variables['ball_x']
@@ -48,7 +48,7 @@ def renderOverrider(env):
     return render
 
 if __name__ == '__main__':
-    env = make_env(0, save_interval=99999999)
-    # env.render = renderOverrider(env)
-    play(env, fps=30, zoom=3)
+    env = make_env(0, save_interval=5000)
+    env.render = renderOverrider(env)
+    play(env, fps=1, zoom=3)
     env.close()

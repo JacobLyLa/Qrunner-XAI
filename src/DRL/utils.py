@@ -6,6 +6,8 @@ import torch
 
 from q_network import QNetwork
 
+# TODO: move around
+
 def load_game_data():
     with open('../data/game_steps.pickle', 'rb') as f:
         game_steps = pickle.load(f)
