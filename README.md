@@ -1,10 +1,13 @@
-# atari-tcav
+# Change title
 
-running locally:
-activate venv
-use project directory
-python3.9 -m src.module.file
+Running locally:
 
-notebooks use:
+1. activate venv
+2. cd to project directory
+3. python3.9 -m src.module.file
+
+For notebooks:
+```
 import sys
 sys.path.insert(0, '../src')
+```

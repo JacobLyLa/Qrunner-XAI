@@ -24,8 +24,10 @@ def get_q_values(model, obs):
 def create_or_load_model(algorithm, env, restart, model_name, tensorboard_log):
     if restart:
         if algorithm is DQN:
-            model = algorithm("CnnPolicy", env, verbose=0, tensorboard_log=tensorboard_log, learning_starts=10000, buffer_size=200000)
+            print("Creating new DQN model")
+            model = algorithm("CnnPolicy", env, verbose=0, tensorboard_log=tensorboard_log, learning_starts=30000, buffer_size=400000, gamma=0.995)
         else:
+            print("Creating new PPO model")
             model = algorithm("CnnPolicy", env, verbose=0, tensorboard_log=tensorboard_log)
     else:
         model = algorithm.load(model_name)
@@ -40,7 +42,8 @@ def train_model(use_dqn, env, its, restart=True):
     model = create_or_load_model(algorithm, env, restart, model_name, tensorboard_log)
 
     for i in range(10):
-        model.learn(total_timesteps=its//10, reset_num_timesteps=False, progress_bar=True)
+        reset_timesteps = True if i == 0 and restart else False
+        model.learn(total_timesteps=its//10, reset_num_timesteps=reset_timesteps, progress_bar=True)
         model.save(model_name)
         print(f"[{i}] Model saved as {model_name}")
 
@@ -48,7 +51,9 @@ def train_model(use_dqn, env, its, restart=True):
 
 
 def main():
-    env = wrapped_qrunner_env(size=84, frame_skip=4, frame_stack=2, render_mode='rgb_array', record_video=False) # for some reason record video only works for PPO and not DQN
+    frame_skip = 4
+    frame_stack = 4
+    env = wrapped_qrunner_env(size=84, frame_skip=frame_skip, frame_stack=frame_stack, render_mode='rgb_array', record_video=False) # for some reason record video only works for PPO and not DQN
     obs, info = env.reset()
     print(f"Observation shape: {obs.shape}")
     check_env(env, warn=True)
@@ -61,11 +66,11 @@ def main():
     # Test the trained agent
     # With human render the original env and size is used.
     # Can decrease frame_skip so the agent makes decision every frame in contrast to every 4th frame
-    env = wrapped_qrunner_env(size=84*10, frame_skip=4, frame_stack=2, render_mode='human', record_video=False)
+    env = wrapped_qrunner_env(size=84*10, frame_skip=frame_skip, frame_stack=frame_stack, render_mode='human', record_video=False)
     model.set_env(env)
     obs, info = env.reset()
     last_time = time.time()
-    target_fps = 60
+    target_fps = 30
     for _ in range(10000):
         current_time = time.time()
         time.sleep(max(0, 1/target_fps - (current_time - last_time)))

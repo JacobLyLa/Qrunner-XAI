@@ -105,7 +105,6 @@ class Coin(Event):
         # check if coin overlaps too much with wall
         for event in self.game.active_events:
             if isinstance(event, Wall) and event.overlap_ratio(self) > 0.0:
-                print("Coin covered by wall, generating new coin")
                 return self.generate()
 
     def frame_update_remove(self):
@@ -146,7 +145,6 @@ class Wall(Event):
             # check if wall is covered by another wall
             for event in self.game.active_events:
                 if isinstance(event, Wall) and event.overlap_ratio(self) > 0.5:
-                    print("Wall covered by another wall, generating new wall")
                     return self.generate()
         # Air wall
         else:
@@ -157,7 +155,6 @@ class Wall(Event):
             # check if wall is covered by another wall
             for event in self.game.active_events:
                 if isinstance(event, Wall) and event.overlap_ratio(self) > 0.1:
-                    print("Wall covered by another wall, generating new wall")
                     return self.generate()
             # Also generate a coin on top of it
             coin = Coin(self.game, self.x + self.width // 2, self.y, 'blue')
@@ -283,7 +280,6 @@ class Lava(Event):
         # check if lava overlaps with other lava
         for event in self.game.active_events:
             if isinstance(event, Lava) and event.overlap_ratio(self) > 0.1:
-                print("Lava covered by another lava, generating new lava")
                 return self.generate()
             
         # x% chance for extra lava to the right
