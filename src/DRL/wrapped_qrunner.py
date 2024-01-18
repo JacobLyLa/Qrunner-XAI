@@ -41,7 +41,8 @@ def wrapped_qrunner_env(size, render_mode="rgb_array", record_video=False, frame
     if record_video:
         env = gym.wrappers.RecordVideo(env, f"../runs/videos")
     
-    env = MaxAndSkipEnv(env, skip=frame_skip)  # Skips frames and repeats action and sums reward. max not needed
+    if frame_skip > 1:
+        env = MaxAndSkipEnv(env, skip=frame_skip)  # Skips frames and repeats action and sums reward. max not needed
     #env = WarpFrame(env, width=size, height=size)  # Resize and grayscale
     if size != final_size:
         print("Resizing observation to 84x84")

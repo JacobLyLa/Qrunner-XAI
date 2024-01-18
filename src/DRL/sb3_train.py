@@ -25,7 +25,7 @@ def create_or_load_model(algorithm, env, restart, model_name, tensorboard_log):
     if restart:
         if algorithm is DQN:
             print("Creating new DQN model")
-            model = algorithm("CnnPolicy", env, verbose=0, tensorboard_log=tensorboard_log, learning_starts=30000, buffer_size=400000, gamma=0.995)
+            model = algorithm("CnnPolicy", env, verbose=0, tensorboard_log=tensorboard_log, learning_starts=30000, buffer_size=100000, gamma=0.99)
         else:
             print("Creating new PPO model")
             model = algorithm("CnnPolicy", env, verbose=0, tensorboard_log=tensorboard_log)
@@ -58,19 +58,19 @@ def main():
     print(f"Observation shape: {obs.shape}")
     check_env(env, warn=True)
     
-    model = train_model(True, env, 500000, restart=True)
-    #model = DQN.load("dqn_qrunner")
+    #model = train_model(True, env, 4000000, restart=True)
+    model = DQN.load("dqn_qrunner")
     #model = train_model(False, env, 500000, restart=True)
     #model = PPO.load("ppo_qrunner")
 
     # Test the trained agent
     # With human render the original env and size is used.
     # Can decrease frame_skip so the agent makes decision every frame in contrast to every 4th frame
-    env = wrapped_qrunner_env(size=84*10, frame_skip=frame_skip, frame_stack=frame_stack, render_mode='human', record_video=False)
+    env = wrapped_qrunner_env(size=84*10, frame_skip=1, frame_stack=frame_stack, render_mode='human', record_video=False)
     model.set_env(env)
     obs, info = env.reset()
     last_time = time.time()
-    target_fps = 30
+    target_fps = 50
     for _ in range(10000):
         current_time = time.time()
         time.sleep(max(0, 1/target_fps - (current_time - last_time)))
