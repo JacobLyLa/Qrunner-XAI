@@ -13,7 +13,3 @@ def load_game_data():
         game_steps = pickle.load(f)
     return game_steps
 
-def load_q_network_device(model_path="../runs/20231107-224748/models/model_10000000.pt"):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    q_network = QNetwork(model_path).to(device).eval()
-    return q_network, device

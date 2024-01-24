@@ -88,7 +88,6 @@ def main():
         
         if terminated or truncated:
             print(info['episode'])
-
     env.close()
 
 if __name__ == "__main__":

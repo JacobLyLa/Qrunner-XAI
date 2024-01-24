@@ -10,8 +10,8 @@ from stable_baselines3.common.buffers import ReplayBuffer
 from torch.nn.functional import mse_loss
 from torch.utils.tensorboard import SummaryWriter
 
-from custom_env import make_env
-from q_network import QNetwork, QRunnerNetwork
+from src.DRL.qnetwork import QNetwork
+from src.DRL.wrapped_qrunner import wrapped_qrunner_env
 
 # Inspired by:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
@@ -22,44 +22,56 @@ class LinearSchedule:
         self.start = start
         self.end = end
         self.duration = duration
-        self.step_count = -1  # to return start value on the first step
+        self.step_count = 0
 
     def step(self):
-        if self.step_count >= self.duration - 1:
+        if self.step_count >= self.duration:
             return self.end
 
-        self.step_count += 1
         value = self.start + (self.end - self.start) * (self.step_count / self.duration)
+        self.step_count += 1
         return value
 
 if __name__ == "__main__":
     seed = 0
-    buffer_size = 1_000_000
-    gamma = 0.99
-    tau = 1.0 # 1.0 = hard update used in DQN
+    num_checkpoints = 10 # Includes 0 step model, so num_checkpoints + 1 are saved
+    log_checkpoints = False
+    record_video = False
+    human_render = False
+    
+    gamma = 0.9 # 0.9 better than 0.99 for Qrunner, try decrease further
+    tau = 1.0 # 1.0 = hard update used in nature paper
     learning_rate = 0.0001
-    learning_starts = 80_000 # Exclusive
-    total_timesteps = 10_000_000 + learning_starts
-    num_checkpoints = 10
-    start_e = 1.0
-    end_e = 0.01
-    exploration_duration = 1_000_000
     target_network_frequency = 1000
-    train_frequency = 4
     batch_size = 32
+    train_frequency = 4
+    
+    total_timesteps = 10_000_000
+    learning_starts = 10_000 # Fill replaybuffer TODO: any other purpose?
+    buffer_size = 100_000 # Might need to reduce if memory issues on HPC
+    start_eps = 1.0 # 1
+    end_eps = 0.05 # 0.01 - 0.05
+    duration_eps = 100_000
+    
+    env_size = 84*6 # Will be rescaled to 84, but recordings and human render will be in this size
+    frame_skip = 3
+    frame_stack = 2
 
-    log_increment = math.log10(total_timesteps - learning_starts)
-    log_step_size = log_increment / (num_checkpoints-1)
-    save_points = [0] + [int(10**(log_step_size * i)) for i in range(1, num_checkpoints - 1)] + [total_timesteps - learning_starts]
-    print(f"Saves: {save_points}")
+    if log_checkpoints:
+        log_increment = math.log10(total_timesteps)
+        log_step_size = log_increment / num_checkpoints
+        save_points = [0] + [int(10 ** (log_step_size * i)) for i in range(1, num_checkpoints + 1)]
+    else:
+        save_points = [int(total_timesteps / num_checkpoints) * i for i in range(num_checkpoints + 1)]
+    print(f"Saving checkpoints: {save_points}")
 
-    ls = LinearSchedule(start_e, end_e, exploration_duration)
+    ls = LinearSchedule(start_eps, end_eps, duration_eps)
 
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_name = str(date)
-    model_path = f"../runs/{run_name}/models"
+    model_path = f"runs/{run_name}"
 
-    writer = SummaryWriter(f"../runs/{run_name}")
+    writer = SummaryWriter(model_path)
     writer.add_text(
         "hyperparameters",
         f"buffer_size: {buffer_size}\n"
@@ -68,8 +80,8 @@ if __name__ == "__main__":
         f"learning_rate: {learning_rate}\n"
         f"seed: {seed}\n"
         f"total_timesteps: {total_timesteps}\n"
-        f"start_e: {start_e}\n"
-        f"end_e: {end_e}\n"
+        f"start_eps: {start_eps}\n"
+        f"end_eps: {end_eps}\n"
         f"target_network_frequency: {target_network_frequency}\n"
         f"learning_starts: {learning_starts}\n"
         f"train_frequency: {train_frequency}\n"
@@ -85,12 +97,12 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
 
-    q_network = QNetwork().to(device)
+    q_network = QNetwork(frame_stacks=frame_stack).to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
-    target_network = QNetwork().to(device)
+    target_network = QNetwork(frame_stacks=frame_stack).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
-    env = make_env(seed=seed)
+    env = wrapped_qrunner_env(size=env_size, frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render)
     rb = ReplayBuffer(
         buffer_size,
         env.observation_space,
@@ -133,7 +145,7 @@ if __name__ == "__main__":
         obs = next_obs
 
         # Possibly train
-        if global_step > learning_starts:
+        if global_step >= learning_starts:
             if global_step % train_frequency == 0:
                 data = rb.sample(batch_size)
                 with torch.no_grad():
@@ -174,10 +186,8 @@ if __name__ == "__main__":
                 sps = int(global_step / (time.time() - start_time))
                 writer.add_scalar("charts/SPS", sps, global_step)
             
-
-        if global_step >= learning_starts:
-            training_steps = global_step - learning_starts
-            if training_steps in save_points:
-                torch.save(q_network.state_dict(), model_path + f"/model_{training_steps}.pt")
-                print(f"saved model: {training_steps}")
+            # Possibly save model
+            if global_step in save_points:
+                torch.save(q_network.state_dict(), f"{model_path}/model_{global_step}.pt")
+                print(f"Saved checkpoint: {global_step}")
     env.close()

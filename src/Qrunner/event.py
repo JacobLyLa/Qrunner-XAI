@@ -14,9 +14,18 @@ TODO:
 
 # TODO:
 # if event is outside of screen skip drawing it
+
+# TODO:
+# falls of if at the very tip of a wall
+# if player stands on wall then goes off then it can get backup by going towards it (only when falling not jumping)
+
+# TODO:
+# when checking for too much overlap it might not work to just randomly generate a new event.
+# this can infinitely loop. instead just generate no event?
 class Event(ABC):
     def __init__(self, game):
         self.game = game
+        self.fail = False
 
     def overlap(self, player):
         if (player.x + player.width < self.x or  # Player's right side is left of Wall's left side
@@ -62,7 +71,7 @@ class Coin(Event):
     GOLD = (255, 222, 0)
     RED = (255, 50, 25)
     BLUE = (64, 32, 200)
-    WEIGHT = 5
+    WEIGHT = 10
     
     def __init__(self, game, x=None, y=None, coin_type=None):
         super().__init__(game)
@@ -105,7 +114,7 @@ class Coin(Event):
         # check if coin overlaps too much with wall
         for event in self.game.active_events:
             if isinstance(event, Wall) and event.overlap_ratio(self) > 0.0:
-                return self.generate()
+                self.fail = True
 
     def frame_update_remove(self):
         if self.overlap(self.game.player):
@@ -120,14 +129,13 @@ class Coin(Event):
         font = pygame.font.SysFont('comicsans', int(self.radius*2))
         text = font.render(str(self.value), 1, (0, 0, 0))
         window.blit(text, (self.x - offset + self.radius - text.get_width() // 2, self.y + self.radius - text.get_height() // 2))
-        # if red coin, draw hitbox
-        if self.color == Coin.RED:
-            pygame.draw.rect(window, (0, 0, 0), (self.x - offset, self.y, self.width, self.height), 1)
+        # draw hitbox
         '''
+        #pygame.draw.rect(window, (0, 0, 0), (self.x - offset, self.y, self.width, self.height), 1)
 
 class Wall(Event):
     GREY = (128, 128, 128)
-    GREY2 = (28, 28, 28)
+    GREY2 = (100, 100, 100)
     WEIGHT = 15
     
     def __init__(self, game):
@@ -137,7 +145,7 @@ class Wall(Event):
     def generate(self):
         s = self.game.size
         # Ground wall
-        if random.random() < 0.9:
+        if random.random() < 0.8:
             self.width = random.randint(int(0.2*s), int(0.6*s))
             self.height = random.randint(int(0.1*s), int(0.25*s))
             self.x = self.game.player.x + self.game.size + random.randint(0, self.game.size // 2)
@@ -145,7 +153,8 @@ class Wall(Event):
             # check if wall is covered by another wall
             for event in self.game.active_events:
                 if isinstance(event, Wall) and event.overlap_ratio(self) > 0.5:
-                    return self.generate()
+                    self.fail = True
+                    return
         # Air wall
         else:
             self.width = random.randint(int(0.2*s), int(0.4*s))
@@ -155,7 +164,8 @@ class Wall(Event):
             # check if wall is covered by another wall
             for event in self.game.active_events:
                 if isinstance(event, Wall) and event.overlap_ratio(self) > 0.1:
-                    return self.generate()
+                    self.fail = True
+                    return
             # Also generate a coin on top of it
             coin = Coin(self.game, self.x + self.width // 2, self.y, 'blue')
             self.game.active_events.append(coin)
@@ -178,31 +188,32 @@ class Wall(Event):
         moved_down = player.y - player.y_prev > 0
         moved_up = player.y - player.y_prev < 0
 
-        # If the player moved right into the wall
-        if moved_right and player.x + player.width > self.x and player.x_prev + player.width <= self.x:
-            # if "stairs" then dont collide.
-            # stairs are when bottom of player and top of wall have small difference
-            if player.y + player.height - self.y < 0.04 * self.game.size:
-                player.y = self.y - player.height
-            else:
-                player.x = self.x - player.width
-        # If the player moved left into the wall
-        if moved_left and player.x < self.x + self.width and player.x_prev >= self.x + self.width:
-            # check stairs
-            if player.y + player.height - self.y < 0.04 * self.game.size:
-                player.y = self.y - player.height
-            else:
-                player.x = self.x + self.width
         # If the player moved down into the wall
         if moved_down and player.y + player.height > self.y and player.y_prev + player.height <= self.y:
             player.y = self.y - player.height
             player.gravity_count = 0
             player.standing_on = self
             player.jumping = False
+            
         # If the player moved up into the wall
         if moved_up and player.y < self.y + self.height and player.y_prev >= self.y + self.height:
             player.y = self.y + self.height
-            # player.jumping = False
+            player.gravity_count = self.game.gravity
+            player.jumping = False
+        # If the player moved right into the wall
+        if moved_right and player.x + player.width > self.x and player.x_prev + player.width <= self.x:
+            # if "stairs" then dont collide. stairs are when bottom of player and top of wall have small difference
+            if player.y + player.height < self.y + 0.05 * self.game.size:
+                player.y = self.y - player.height
+            else:
+                player.x = self.x - player.width - 0.001
+        # If the player moved left into the wall
+        if moved_left and player.x < self.x + self.width and player.x_prev >= self.x + self.width:
+            # check stairs
+            if player.y + player.height < self.y + 0.05 * self.game.size:
+                player.y = self.y - player.height
+            else:
+                player.x = self.x + self.width + 0.001
 
     def draw(self, window, offset):
         if self.game.player.standing_on == self:
@@ -222,8 +233,8 @@ class Bullet(Event):
 
     def generate(self):
         s = self.game.size
-        self.width = 0.06 * s
-        self.height = 0.06 * s
+        self.width = 0.05 * s
+        self.height = 0.05 * s
         
         self.x = self.game.player.x + self.game.size + random.randint(0, self.game.size // 2)
         # 50% chance for y to be between player position
@@ -235,7 +246,7 @@ class Bullet(Event):
     def frame_update_remove(self):
         if self.x + self.width < self.game.camera_offset_x:
             return True
-        self.x -= 0.01 * self.game.size  # Move the bullet leftwards
+        self.x -= 0.0075 * self.game.size  # Move the bullet leftwards
         if self.overlap(self.game.player):
             if self.game.player.star:
                 self.game.player.score += self.VALUE
@@ -280,7 +291,8 @@ class Lava(Event):
         # check if lava overlaps with other lava
         for event in self.game.active_events:
             if isinstance(event, Lava) and event.overlap_ratio(self) > 0.1:
-                return self.generate()
+                self.fail = True
+                return
             
         # x% chance for extra lava to the right
         if random.random() < 0.2:
@@ -312,6 +324,80 @@ class Lava(Event):
             else:
                 pygame.draw.rect(window, (200, 200, 200), (self.x - offset + i * pattern_width, self.y, pattern_width, self.height))
         '''
+
+class Shuriken(Event):
+    COLOR = (100, 100, 130)
+    JUMP_SPEED = 0.015  # Speed of jumping up and down
+    WEIGHT = 5
+    
+    def __init__(self, game):
+        super().__init__(game)
+        self.generate()
+
+    def generate(self):
+        s = self.game.size
+        self.radius = 0.035 * s
+        self.width = self.radius * 2
+        self.height = self.radius * 2
+        self.x = self.game.player.x + self.game.size + random.randint(0, self.game.size // 2)
+        #self.y = self.game.size - self.game.ground_height - self.radius * 2
+        self.y = random.randint(int(0.2*s), int(s - self.game.ground_height - 0.1*s))
+        self.jump_velocity = Shuriken.JUMP_SPEED
+        self.max_height = s - s * 0.95
+        self.direction = 1 if random.random() < 0.5 else -1
+
+    def frame_update_remove(self):
+        if self.x + self.radius * 2 < self.game.camera_offset_x:
+            return True
+
+        # Update position
+        self.y += self.direction * self.jump_velocity * self.game.size
+        if self.direction == -1 and self.y <= self.max_height:
+            self.direction = 1  # Start moving down
+        elif self.direction == 1 and self.y >= self.game.size - self.game.ground_height - self.radius * 2:
+            self.direction = -1  # Start moving up
+
+        # Collision with player
+        if self.overlap(self.game.player):
+            self.game.game_over = True
+            return True
+
+        return False
+
+    def draw_shuriken(self, center, size, points, color, window):
+        """Helper function to draw a shuriken (ninja star)"""
+        def get_star_points(center, size, points):
+            """Calculate the (x, y) coordinates for a shuriken"""
+            step = math.pi / points
+            angle = 0
+            outer_points = []
+            inner_points = []
+            for _ in range(points):
+                outer_x = center[0] + int(math.cos(angle) * size)
+                outer_y = center[1] + int(math.sin(angle) * size)
+                outer_points.append((outer_x, outer_y))
+
+                inner_angle = angle + step / 2
+                inner_x = center[0] + int(math.cos(inner_angle) * size / 2)
+                inner_y = center[1] + int(math.sin(inner_angle) * size / 2)
+                inner_points.append((inner_x, inner_y))
+
+                angle += 2 * step
+
+            return [val for pair in zip(outer_points, inner_points) for val in pair]
+
+        points = get_star_points(center, size, points)
+        if self.direction == 1:
+            pygame.draw.polygon(window, color, points)
+        else:
+            pygame.draw.polygon(window, (50, 50, 80), points)
+
+    def draw(self, window, offset):
+        # Draw a shuriken
+        center = (int(self.x - offset + self.radius), int(self.y + self.radius))
+        self.draw_shuriken(center, self.radius, 4, self.COLOR, window)  # Adjust the number of points as needed
+        # Draw hitbox for debugging (optional)
+        # pygame.draw.rect(window, (0, 0, 0), (int(self.x - offset), int(self.y), int(self.radius * 2), int(self.radius * 2)), 1)
 
 class Star(Event):
     YELLOW = (255, 255, 0)  # Bright yellow color for the star
