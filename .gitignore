@@ -27,3 +27,4 @@ events.out.tfevents.*
 
 # Ignore venv
 venv/
+.venv/
