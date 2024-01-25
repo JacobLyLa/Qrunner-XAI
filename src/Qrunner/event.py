@@ -124,13 +124,6 @@ class Coin(Event):
 
     def draw(self, window, offset):
         pygame.draw.circle(window, self.color, (self.x - offset + self.radius, self.y + self.radius), self.radius)
-        # write the value inside the coin
-        '''
-        font = pygame.font.SysFont('comicsans', int(self.radius*2))
-        text = font.render(str(self.value), 1, (0, 0, 0))
-        window.blit(text, (self.x - offset + self.radius - text.get_width() // 2, self.y + self.radius - text.get_height() // 2))
-        # draw hitbox
-        '''
         #pygame.draw.rect(window, (0, 0, 0), (self.x - offset, self.y, self.width, self.height), 1)
 
 class Wall(Event):
@@ -267,13 +260,12 @@ class Bullet(Event):
         point2 = (point2[0], point2[1] + self.width // 2)
         point3 = (point3[0], point3[1] + self.width // 2)
         pygame.draw.polygon(window, self.COLOR, [point1, point2, point3])
-        # Also draw a tiny rectangle to show hitbox
-        # pygame.draw.rect(window, (0, 0, 0), (self.x - offset, self.y, self.width, self.height), 1)
+        # Draw rectangle to show hitbox
+        #pygame.draw.rect(window, (0, 0, 0), (self.x - offset, self.y, self.width, self.height), 1)
 
 class Lava(Event):
-    COLOR = (255, 125, 0) # Bright red-orange color for lava
+    COLOR = (255, 125, 0)
     WEIGHT = 5
-    # sprite = pygame.image.load("Qrunner/resources/lava_sprite.jpg")
     
     def __init__(self, game, x=None, width=None):
         super().__init__(game)
@@ -300,8 +292,6 @@ class Lava(Event):
         if random.random() < 0.2:
             lava = Lava(self.game, self.x + self.width + self.game.player.width * 2, self.width)
             self.game.active_events.append(lava)
-        
-        # self.scaled_sprite = pygame.transform.scale(self.sprite, (self.width, self.height))
 
     def frame_update_remove(self):
         if self.x + self.width < self.game.camera_offset_x:
@@ -312,20 +302,7 @@ class Lava(Event):
         return False
 
     def draw(self, window, offset):
-        #window.blit(self.scaled_sprite, (self.x - offset, self.y))
         pygame.draw.rect(window, self.COLOR, (self.x - offset, self.y, self.width, self.height))
-        # Also draw a tiny rectangle to show hitbox
-        # pygame.draw.rect(window, (0, 0, 0), (self.x - offset, self.y, self.width, self.height), 1)
-        
-        '''
-        pattern_width = 5  # Width of each stripe in the pattern
-        for i in range(self.width // pattern_width):
-            # Alternating pattern for visibility in grayscale
-            if i % 2 == 0:
-                pygame.draw.rect(window, self.COLOR, (self.x - offset + i * pattern_width, self.y, pattern_width, self.height))
-            else:
-                pygame.draw.rect(window, (200, 200, 200), (self.x - offset + i * pattern_width, self.y, pattern_width, self.height))
-        '''
 
 class Shuriken(Event):
     COLOR = (100, 100, 130)
@@ -341,22 +318,22 @@ class Shuriken(Event):
         self.radius = 0.035 * s
         self.width = self.radius * 2
         self.height = self.radius * 2
-        self.x = self.game.player.x + self.game.size + random.randint(0, self.game.size // 2)
-        #self.y = self.game.size - self.game.ground_height - self.radius * 2
+        self.x = self.game.player.x + s + random.randint(0, s // 2)
         self.y = random.randint(int(0.2*s), int(s - self.game.ground_height - 0.1*s))
         self.jump_velocity = Shuriken.JUMP_SPEED
         self.max_height = s - s * 0.95
         self.direction = 1 if random.random() < 0.5 else -1
 
     def frame_update_remove(self):
+        s = self.game.GAME_SIZE
         if self.x + self.radius * 2 < self.game.camera_offset_x:
             return True
 
         # Update position
-        self.y += self.direction * self.jump_velocity * self.game.size
+        self.y += self.direction * self.jump_velocity * s
         if self.direction == -1 and self.y <= self.max_height:
             self.direction = 1  # Start moving down
-        elif self.direction == 1 and self.y >= self.game.size - self.game.ground_height - self.radius * 2:
+        elif self.direction == 1 and self.y >= s - self.game.ground_height - self.radius * 2:
             self.direction = -1  # Start moving up
 
         # Collision with player
@@ -398,7 +375,6 @@ class Shuriken(Event):
         # Draw a shuriken
         center = (int(self.x - offset + self.radius), int(self.y + self.radius))
         self.draw_shuriken(center, self.radius, 4, self.COLOR, window)  # Adjust the number of points as needed
-        # Draw hitbox for debugging (optional)
         # pygame.draw.rect(window, (0, 0, 0), (int(self.x - offset), int(self.y), int(self.radius * 2), int(self.radius * 2)), 1)
 
 class Star(Event):

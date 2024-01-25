@@ -48,10 +48,10 @@ if __name__ == "__main__":
     
     total_timesteps = 10_000_000
     learning_starts = 10_000 # Fill replaybuffer TODO: any other purpose?
-    buffer_size = 500_000 # Might need to reduce if memory issues on HPC
+    buffer_size = 100_000 # Might need to reduce if memory issues on HPC
     start_eps = 1.0 # 1
     end_eps = 0.05 # 0.01 - 0.05
-    duration_eps = 500_000
+    duration_eps = 100_000
     
     frame_skip = 3
     frame_stack = 2

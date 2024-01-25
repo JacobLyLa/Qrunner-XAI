@@ -8,18 +8,17 @@ import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import pygame
-from gymnasium.wrappers import (ResizeObservation, TimeLimit,
-                                TransformReward)
-from stable_baselines3.common.atari_wrappers import (ClipRewardEnv,
-                                                     NoopResetEnv, WarpFrame)
+from gymnasium.spaces import Box
+from gymnasium.wrappers import TransformReward
+from scipy.ndimage import gaussian_filter
 from stable_baselines3.common.env_checker import check_env
 from tqdm import tqdm
-from gymnasium.spaces import Box
+
 from src.Qrunner.qrunner import QrunnerEnv
 
 # Most of the wrappers are based on:
-# gymnasium.wrappers (src)
-# stable_baselines3.common.atari_wrappers (src)
+# (https://gymnasium.farama.org/api/wrappers/)
+# (https://stable-baselines3.readthedocs.io/en/master/common/atari_wrappers.html)
 
 class LazyFrames:
     def __init__(self, frames, lz4_compress=False):
@@ -182,6 +181,7 @@ class HumanRendering(gym.Wrapper):
 
 # TODO: New window with graphs
 # But this method can still be used for saliency maps?
+# TODO: this wrapper should be combined with human rendering wrapper
 class RenderWrapper(gym.Wrapper):
     def __init__(self, env, length):
         gym.Wrapper.__init__(self, env)
@@ -191,6 +191,9 @@ class RenderWrapper(gym.Wrapper):
         self.min_scale = 0
         self.unwrapped.salience_map = None
         self.unwrapped.set_salience = self.set_salience
+        
+        self.initialized = False
+        print(env.get_action_meanings())
 
     def set_salience(self, saliency_map):
         self.unwrapped.salience_map = saliency_map
@@ -199,122 +202,96 @@ class RenderWrapper(gym.Wrapper):
         self.unwrapped.q_values.append(q_values)
         self.max_scale = max(max(q_values), self.max_scale)
         self.min_scale = min(min(q_values), self.min_scale)
+        if not self.initialized:
+            self.initialize_plot()
+        self.update_plot()
+        
+    def initialize_plot(self):
+        plt.ion()
+        self.fig, self.ax = plt.subplots()
+        self.q_value_lines = []
+        action_meanings = self.env.unwrapped.get_action_meanings()
+        for action in action_meanings:
+            line, = self.ax.plot([], [], label=action)
+            self.q_value_lines.append(line)
+        # Lines for mean and max Q-values
+        # self.mean_q_value_line, = self.ax.plot([], [], label='Mean Q-value')
+        self.max_q_value_line, = self.ax.plot([], [], label='Max Q-value')
+        self.ax.legend()
+        self.ax.set_title("Q Values Over Time")
+        self.ax.set_xlabel("Time Step")
+        self.ax.set_ylabel("Q Value")
+        self.initialized = True
+        
+    def update_plot(self):
+        # Set y limits
+        self.ax.set_ylim([self.min_scale, self.max_scale])
+        
+        time_steps = range(len(self.unwrapped.q_values))
+        all_q_values = np.array(self.unwrapped.q_values)
+
+        '''
+        # Update line for mean Q-value
+        mean_q_values = np.mean(all_q_values, axis=1)
+        self.mean_q_value_line.set_xdata(time_steps)
+        self.mean_q_value_line.set_ydata(mean_q_values)
+        self.mean_q_value_line.set_linewidth(3)  # Make the line a bit bolder
+        '''
+
+        # Update line for max Q-value
+        max_q_values = np.max(all_q_values, axis=1)
+        self.max_q_value_line.set_xdata(time_steps)
+        self.max_q_value_line.set_ydata(max_q_values)
+        self.max_q_value_line.set_linewidth(5)  # Make the line a bit bolder
+
+        # Adjust plot limits and redraw
+        self.ax.relim()
+        self.ax.autoscale_view()
+        self.ax.legend(loc='upper left')  # Fix the legend position
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+        
+        # Update lines for each action
+        for i, line in enumerate(self.q_value_lines):
+            line.set_xdata(time_steps)
+            line.set_ydata(all_q_values[:, i])
 
     def render(self):
         obs = self.env.render()
-
-        if len(self.unwrapped.q_values) > 0:
-            obs = self.overlay_q_values_graph(obs)
-            
         if self.unwrapped.salience_map is not None:
             obs = self.overlay_salience_map(obs)
         return obs
-
-    def overlay_q_values_graph(self, obs):
-        # Get the dimensions of the observation
-        height, width, _ = obs.shape
-        num_actions = len(self.unwrapped.q_values[0])
-        num_steps = len(self.unwrapped.q_values)
-        y_center = int(height * 0.1)
-        y_center_deviation = int(height * 0.1)
-        x_end = int(width * 0.5)
-        # For each step
-        for i in range(1, num_steps):
-            mean = 0
-            mean_prev = 0
-            # For each action
-            for j in range(num_actions):
-                q_value_scaled = self.scale_q_value(self.unwrapped.q_values[i][j])
-                q_value_scaled_prev = self.scale_q_value(self.unwrapped.q_values[i - 1][j])
-                mean += q_value_scaled
-                mean_prev += q_value_scaled_prev
-                '''
-                x1 = int(x_end * (i - 1) / num_steps)
-                y1 = int(y_center - q_value_scaled_prev * y_center_deviation)
-                x2 = int(x_end * i / num_steps)
-                y2 = int(y_center - q_value_scaled * y_center_deviation)
-            
-                self.draw_line(obs, (x1, y1), (x2, y2), color=(255, 0, 0), thickness=1)
-                '''
-            mean /= num_actions
-            mean_prev /= num_actions
-            x1 = int(x_end * (i - 1) / num_steps)
-            y1 = int(y_center - mean_prev * y_center_deviation)
-            x2 = int(x_end * i / num_steps)
-            y2 = int(y_center - mean * y_center_deviation)
-            self.draw_line(obs, (x1, y1), (x2, y2), color=(0, 255, 0), thickness=1)
-
-        # Draw boundary box
-        self.draw_line(obs, (0, y_center + y_center_deviation), (x_end, y_center + y_center_deviation), color=(255, 255, 255))
-        self.draw_line(obs, (0, y_center - y_center_deviation), (x_end, y_center - y_center_deviation), color=(255, 255, 255))
-        self.draw_line(obs, (x_end, y_center - y_center_deviation), (x_end, y_center + y_center_deviation), color=(255, 255, 255))
-        # Draw positive/negative seperation line
-        zero_scaled = self.scale_q_value(0)
-        y_zero = int(y_center - zero_scaled * y_center_deviation)
-        self.draw_line(obs, (0, y_zero), (x_end, y_zero), color=(0, 0, 255), thickness=1)
-
-        return obs
     
-    # TODO: Probably tons of ways to visualize this.
+    # TODO: Choose between
     # 1. Red bad and green good, look at gradient sign
     # 2. Look at gradient magnitude, blue -> red 
     def overlay_salience_map(self, obs):
         if self.unwrapped.salience_map is None:
             return obs
-
+        
         height, width, _ = obs.shape
         saliency_height, saliency_width = self.unwrapped.salience_map.shape
-
         # Rescale if necessary
         if (height, width) != (saliency_height, saliency_width):
             salience_map = cv2.resize(self.unwrapped.salience_map, (width, height))
         else:
             salience_map = self.unwrapped.salience_map
         
+        salience_map = gaussian_filter(salience_map, sigma=8)
         salience_map = salience_map / np.max(salience_map)
+        salience_map[salience_map < 0.7] = 0
 
         # Convert obs from RGB to BGR
         obs = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
 
         # Apply the colormap to the salience map
         salience_map = cv2.applyColorMap(np.uint8(salience_map * 255), cv2.COLORMAP_JET)
-        obs = cv2.addWeighted(obs, 1, salience_map, 0.2, 0)
+        obs = cv2.addWeighted(obs,1, salience_map, 0.3, 0)
 
         # back to RGB afterwards
         obs = cv2.cvtColor(obs, cv2.COLOR_BGR2RGB)
 
         return obs
-
-    # Scale to [-1, 1]
-    def scale_q_value(self, q):
-        return (q - self.min_scale) * 2 / (self.max_scale - self.min_scale) - 1
-
-    def draw_line(self, img, start, end, color=(255, 255, 255), thickness=1):
-        # Bresenham's line algorithm to draw a line on the image
-        x1, y1 = start
-        x2, y2 = end
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
-        sx = 1 if x1 < x2 else -1
-        sy = 1 if y1 < y2 else -1
-        err = dx - dy
-
-        while True:
-            img[y1:y1+thickness, x1:x1+thickness] = color
-            if x1 == x2 and y1 == y2:
-                break
-            e2 = 2 * err
-            if e2 > -dy:
-                err -= dy
-                x1 += sx
-            if e2 < dx:
-                err += dx
-                y1 += sy
-                
-    def reset(self, seed=None, options=None):
-        self.unwrapped.q_values.clear()
-        return self.env.reset(seed=seed, options=options)
-    
 
 def wrapped_qrunner_env(frame_skip=3, frame_stack=2, max_steps=5000, max_steps_no_reward=50, human_render=False, record_video=False, scale=8):
     env = QrunnerEnv()
@@ -330,10 +307,9 @@ def wrapped_qrunner_env(frame_skip=3, frame_stack=2, max_steps=5000, max_steps_n
         env = gym.wrappers.RecordVideo(env=env, name_prefix='recording', video_folder=f"./videos", episode_trigger=lambda x: x in checkpoints)
     
     if frame_skip > 1:
-        # Skips frames and repeats action and sums reward. max not needed
         env = SkipEnv(env, skip=frame_skip)
     
-    LimitEnv(env, max_steps=max_steps, max_steps_no_reward=max_steps_no_reward)
+    env = LimitEnv(env, max_steps=max_steps, max_steps_no_reward=max_steps_no_reward)
     
     env = FrameStack(env, frame_stack)
     
@@ -360,11 +336,7 @@ def convert_obs_to_image(obs):
 
 def main():
     env = wrapped_qrunner_env(frame_skip=3, frame_stack=4, human_render=True, record_video=False, scale=6)
-    #check_env(env, warn=True)
-    
     obs, _ = env.reset()
-    print(f"Observation shape: {obs.shape}")
-    print(f"Observation space: {env.observation_space}")
     num_frames = 50
     save_path = 'figures/observations/'
 
