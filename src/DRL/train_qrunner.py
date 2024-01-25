@@ -53,7 +53,6 @@ if __name__ == "__main__":
     end_eps = 0.05 # 0.01 - 0.05
     duration_eps = 100_000
     
-    env_size = 84*6 # Will be rescaled to 84, but recordings and human render will be in this size
     frame_skip = 3
     frame_stack = 2
 
@@ -102,7 +101,7 @@ if __name__ == "__main__":
     target_network = QNetwork(frame_stacks=frame_stack).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
-    env = wrapped_qrunner_env(size=env_size, frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render)
+    env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render)
     rb = ReplayBuffer(
         buffer_size,
         env.observation_space,

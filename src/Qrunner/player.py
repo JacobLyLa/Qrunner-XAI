@@ -4,8 +4,6 @@ class Player:
     BLUE = (0, 0, 255)
     ORANGE = (255, 165, 0)
     def __init__(self, x, y, width, height, velocity_x, velocity_y):
-        self.font = pygame.font.Font('freesansbold.ttf', int(0.5*width))
-
         self.x = x
         self.y = y
         self.x_prev = x
@@ -24,9 +22,12 @@ class Player:
         self.standing_on = None
         self.star = None
         
-        self.draw_coords = True
-        self.draw_score = True
-        self.draw_star = True
+        # TODO: Only when rendering to human
+        self.draw_coords = False
+        self.draw_score = False
+        self.draw_star = False
+        
+        self.font = pygame.font.Font('freesansbold.ttf', 5)
 
     def draw(self, screen, offset):
         player_color = Player.ORANGE if self.star else Player.BLUE
@@ -35,13 +36,13 @@ class Player:
         if self.draw_coords:
             text = self.font.render(f'x: {int(self.x)}, y: {int(self.y)}', True, (0, 0, 0))
             textRect = text.get_rect()
-            textRect.topleft = (0, 0 + 0 * self.width)
+            textRect.topleft = (0, 0)
             screen.blit(text, textRect)
 
         if self.draw_score:
             text = self.font.render(f'Score: {self.score:.2f}', True, (0, 0, 0))
             textRect = text.get_rect()
-            textRect.topleft = (0, 0 + 0.5 * self.width)
+            textRect.topleft = (0, 10)
             screen.blit(text, textRect)
 
         if self.draw_star:
@@ -51,5 +52,5 @@ class Player:
                 star_text = 'Star: '
             text = self.font.render(star_text, True, (0, 0, 0))
             textRect = text.get_rect()
-            textRect.topleft = (0, 0 + 1 * self.width)
+            textRect.topleft = (0, 20)
             screen.blit(text, textRect)

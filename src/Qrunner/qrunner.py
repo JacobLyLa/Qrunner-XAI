@@ -10,33 +10,32 @@ from gymnasium import spaces
 from src.Qrunner.event import Bullet, Coin, Lava, Portal, Shuriken, Star, Wall
 from src.Qrunner.player import Player
 
-
 class QrunnerEnv(gym.Env):
     metadata = {'render_modes': ['rgb_array'], 'render_fps': 60}
-    def __init__(self, size=252):
+    GAME_SIZE = 84
+    def __init__(self):
         super(QrunnerEnv, self).__init__()
         pygame.init()
         # Game constants
-        self.size = size
-        self.ground_height = self.size // 10
+        self.ground_height = self.GAME_SIZE // 10
+        
         self.frames_since_reward_limit = 300 # TODO: move to wrapper
-        self.reward_per_pixel = 1 / (2 * self.size) # so 1 reward per 2 screen
-        self.start_event_frequency = 0.5 * self.size # every 0.5 screen
-        self.end_event_frequency = 0.1 * self.size # every 0.1 screen
-        self.event_frequency_update = self.size // 5 # everytime the camera offset increases by this, the event frequency is += 1
-        self.camera_lock_x = 0.3 * self.size
-
+        
+        self.reward_per_screen = 0.5
+        self.start_event_frequency = self.GAME_SIZE // 2
+        self.end_event_frequency = self.GAME_SIZE // 10
+        self.event_frequency_update = self.GAME_SIZE
+        self.camera_lock_x = self.GAME_SIZE // 3
+        
         # Player constants
-        self.player_width = self.size // 12
-        self.player_height = self.size // 6
         self.frames_in_air = 30
-        self.velocity_x = 0.02 * self.size
-        self.gravity = 0.002 * self.size
+        self.player_width = 8
+        self.player_height = 18
+        self.velocity_x = 2
+        self.gravity = 0.2
         
         # Pygame stuff
-        self.game_over_font = pygame.font.Font('freesansbold.ttf', self.size // 12)
-        self.normal_font = pygame.font.Font('freesansbold.ttf', int(0.5*self.player_width))
-        self.grass_color = (135, 206, 250)
+        self.sky_color = (135, 206, 250)
         # self.grass_image = pygame.image.load("Qrunner/resources/grass_sprite.jpg")
         # self.available_events = [Coin, Wall, Bullet, Lava, Star, Portal, Shuriken]
         self.available_events = [Bullet, Coin, Lava, Wall]
@@ -45,10 +44,10 @@ class QrunnerEnv(gym.Env):
         # Calculate velocity y such that the player can jump for the specified number of frames
         i = 0
         self.velocity_y = self.gravity
-        while self.calculate_frames_in_air() <= self.frames_in_air and i < 100:
+        while self.calculate_frames_in_air() <= self.frames_in_air and i < self.GAME_SIZE:
             i += 1
             self.velocity_y = self.gravity * (1 + i * 0.5)
-        # print(f"Velocity y: {self.velocity_y}")
+        print(f"Velocity y: {self.velocity_y}")
         # print(f"Actual frames in air: {self.calculate_frames_in_air()}")
 
         # Gymnasium variables
@@ -58,9 +57,11 @@ class QrunnerEnv(gym.Env):
         self.num_actions = 5
         self.action_space = spaces.Discrete(self.num_actions)
         # channel first or last? looks like openCV wants last
-        self.observation_space = spaces.Box(low=0, high=255, shape=(self.size, self.size, 3), dtype=np.uint8)
+        self.observation_space = spaces.Box(low=0, high=255, shape=(self.GAME_SIZE, self.GAME_SIZE, 3), dtype=np.uint8)
         self.reward_range = (-1, 1)
-        self.screen = pygame.Surface((size, size))
+        
+        # Internal surface for game logic (fixed size)
+        self.surface = pygame.Surface((self.GAME_SIZE, self.GAME_SIZE))
         
     def calculate_frames_in_air(self):
         frames_in_air = 0
@@ -83,7 +84,7 @@ class QrunnerEnv(gym.Env):
         random.seed(seed)
         self.camera_offset_x = 0
         
-        self.player = Player(self.camera_lock_x, self.size - self.ground_height - self.player_height, self.player_width, self.player_height, self.velocity_x, self.velocity_y)
+        self.player = Player(self.camera_lock_x, self.GAME_SIZE - self.ground_height - self.player_height, self.player_width, self.player_height, self.velocity_x, self.velocity_y)
         self.game_over = False
         self.spawned_events = 0
         self.active_events = []
@@ -102,41 +103,32 @@ class QrunnerEnv(gym.Env):
     
     def _generate_observation(self):
         # Draw background, grass
-        self.screen.fill(self.grass_color)
+        self.surface.fill(self.sky_color)
         self.draw_grass()
 
         # Draw events
         for event in self.active_events:
             if not isinstance(event, Shuriken):  # Draw all events except shurikens
-                event.draw(self.screen, self.camera_offset_x)
+                event.draw(self.surface, self.camera_offset_x)
         for event in self.active_events:
             if isinstance(event, Shuriken):
-                event.draw(self.screen, self.camera_offset_x)
+                event.draw(self.surface, self.camera_offset_x)
 
         # Draw player
-        self.player.draw(self.screen, self.camera_offset_x)
+        self.player.draw(self.surface, self.camera_offset_x)
 
         # Draw number of events
+        '''
         text = self.normal_font.render(f'Events: {len(self.active_events)}', True, (0, 0, 0))
         textRect = text.get_rect()
-        textRect.topright = (self.size, 0)
-        self.screen.blit(text, textRect)
-
-        pixel_data = pygame.surfarray.array3d(self.screen)
-        observation = np.transpose(pixel_data, (1, 0, 2))
+        textRect.topright = (self.GAME_SIZE, 0)
+        self.surface.blit(text, textRect)
+        '''
+        observation = pygame.surfarray.array3d(self.surface)
+        observation = np.transpose(observation, (1, 0, 2))
         self.last_observation = observation
         return observation
     
-    def _render_to_screen(self):
-        # Get the main display surface from Pygame
-        display_surface = pygame.display.get_surface()
-
-        # Blit (copy) the contents of self.screen onto the display_surface
-        display_surface.blit(self.screen, (0, 0))
-
-        # Update the full display Surface to the screen
-        pygame.display.update()
-
     def step(self, action):
         assert self.action_space.contains(action), f"Invalid action {action} not in {self.action_space}"
         
@@ -150,7 +142,7 @@ class QrunnerEnv(gym.Env):
             if self.need_to_generate_event():
                 self.generate_event()
             if self.player.x - self.last_reward >= 1:
-                self.player.score += self.reward_per_pixel * (self.player.x - self.last_reward)
+                self.player.score += self.reward_per_screen * (self.player.x - self.last_reward) / self.GAME_SIZE
                 self.last_reward = self.player.x
         elif action == 3:  # Jump
             if self.player.gravity_count == 0:
@@ -176,8 +168,8 @@ class QrunnerEnv(gym.Env):
             self.player.gravity_count += self.gravity
 
         # Prevent player from falling below ground
-        if self.player.y + self.player.height > self.size - self.ground_height:
-            self.player.y = self.size - self.ground_height - self.player.height
+        if self.player.y + self.player.height > self.GAME_SIZE - self.ground_height:
+            self.player.y = self.GAME_SIZE - self.ground_height - self.player.height
             self.player.gravity_count = 0
             self.player.jumping = False
 
@@ -227,15 +219,11 @@ class QrunnerEnv(gym.Env):
         return observation, reward, terminated, truncated, info
 
     def render(self):
-        if self.last_observation is not None:
-            # Return a copy of the last observation
-            return np.copy(self.last_observation)
-        else:
-            assert False, "No observation to render"
+        return np.copy(self.last_observation)
 
     def close(self):
         pygame.display.quit()
-        self.screen = None
+        self.surface = None
         pygame.quit()
 
     def need_to_generate_event(self):
@@ -252,30 +240,34 @@ class QrunnerEnv(gym.Env):
             self.active_events.append(event)
 
     def draw_grass(self):
-        pygame.draw.rect(self.screen, (0, 255, 0), (0, self.size - self.ground_height, self.size, self.ground_height))
+        pygame.draw.rect(self.surface, (0, 255, 0), (0, self.GAME_SIZE - self.ground_height, self.GAME_SIZE, self.ground_height))
         '''
         grass_width = self.grass_image.get_width()
 
         # Calculate the start position of the first grass image based on the camera offset
         start_x = -(self.camera_offset_x % grass_width)
 
-        # Adjust start_x to always begin within the screen area
+        # Adjust start_x to always begin within the surface area
         if start_x > 0:
             start_x -= grass_width
 
         # Tile the grass image
         grass_x = start_x
-        while grass_x < self.size:
-            screen.blit(self.grass_image, (grass_x, self.size - self.ground_height))
+        while grass_x < self.GAME_SIZE:
+            surface.blit(self.grass_image, (grass_x, self.GAME_SIZE - self.ground_height))
             grass_x += grass_width
         '''
 
-    # Human mode, clock ticks, render frames to pygame screen, freeze at game over, R for reset
-    def run(self):
+    # Human mode, clock ticks, render frames to pygame surface, freeze at game over, R for reset
+    def run(self, scale=1):
+        screen_size = self.GAME_SIZE * scale
+        game_over_font = pygame.font.Font('freesansbold.ttf', screen_size // 8)
+        normal_font = pygame.font.Font('freesansbold.ttf', screen_size // 16)
         pygame.display.set_caption("Qrunner")
-        self.display_surface = pygame.display.set_mode((self.size, self.size))
+        display_surface = pygame.display.set_mode((screen_size, screen_size))
         clock = pygame.time.Clock()
         run = True
+        game_over = False
         while run:
             clock.tick(60)
 
@@ -287,28 +279,28 @@ class QrunnerEnv(gym.Env):
             # Check for reset game            
             keys = pygame.key.get_pressed()
             if keys[pygame.K_r]:
+                game_over = False
                 self.reset()
 
-            # Freeze on game over
+            # Freeze on game over, only render and print score once
             if self.game_over:
-                text = self.game_over_font.render(f'Game Over', True, (0, 0, 0))
+                if game_over:
+                    continue
+                print(f"Score: {self.player.score:.2f}")
+                game_over = True
+                text = game_over_font.render(f'Game Over', True, (0, 0, 0))
                 textRect = text.get_rect()
-                textRect.center = (self.size // 2, self.size // 2)
-                self.screen.blit(text, textRect)
-                self._render_to_screen()
-                #pygame.display.update()
+                textRect.center = (screen_size // 2, screen_size // 2)
+                display_surface.blit(text, textRect)
+                text = normal_font.render(f'Press R to restart', True, (0, 0, 0))
+                textRect = text.get_rect()
+                textRect.center = (screen_size // 2, screen_size // 2 + 0.1*screen_size)
+                display_surface.blit(text, textRect)
+                pygame.display.update()
                 continue
 
             # Act on key presses
-            '''
-            Currently only one key can be pressed at a time.
-            This is to simplify the action space for the RL agent.
-            Can allow multiple for humans, but restrict for RL agent.
-            But then benchmarks are not that comparable.
-            '''
-
-            # Check if any key is pressed.
-            # Note jump is prioritized over movement etc.
+            # Latter actions override former actions
             action = 0
             if keys[pygame.K_a]:
                 action = 1
@@ -319,11 +311,15 @@ class QrunnerEnv(gym.Env):
             if keys[pygame.K_s]:
                 action = 4
             observation, reward, terminated, truncated, info = self.step(action)
-            self._render_to_screen()
+            surface = pygame.surfarray.make_surface(observation)
+            # Scale surface
+            surface = pygame.transform.scale(surface, (screen_size, screen_size))
+            display_surface.blit(surface, (0, 0))
+            pygame.display.update()
 
         pygame.quit()
 
 if __name__ == "__main__":
-    game = QrunnerEnv(size=84*6)
+    game = QrunnerEnv()
     game.reset()
-    game.run()
+    game.run(1)

@@ -78,7 +78,7 @@ class Coin(Event):
         self.generate(x, y, coin_type)
 
     def generate(self, x=None, y=None, coin_type=None):
-        s = self.game.size
+        s = self.game.GAME_SIZE
         # Decide the type of coin
         if not coin_type:
             coin_type = random.choices(
@@ -143,13 +143,13 @@ class Wall(Event):
         self.generate()
 
     def generate(self):
-        s = self.game.size
+        s = self.game.GAME_SIZE
         # Ground wall
         if random.random() < 0.8:
             self.width = random.randint(int(0.2*s), int(0.6*s))
             self.height = random.randint(int(0.1*s), int(0.25*s))
-            self.x = self.game.player.x + self.game.size + random.randint(0, self.game.size // 2)
-            self.y = self.game.size - self.game.ground_height - self.height
+            self.x = self.game.player.x + s + random.randint(0, s // 2)
+            self.y = s - self.game.ground_height - self.height
             # check if wall is covered by another wall
             for event in self.game.active_events:
                 if isinstance(event, Wall) and event.overlap_ratio(self) > 0.5:
@@ -159,7 +159,7 @@ class Wall(Event):
         else:
             self.width = random.randint(int(0.2*s), int(0.4*s))
             self.height = random.randint(int(0.03*s), int(0.04*s))
-            self.x = self.game.player.x + self.game.size + random.randint(0, self.game.size // 2)
+            self.x = self.game.player.x + s + random.randint(0, s // 2)
             self.y = random.randint(int(0.3*s), int(0.5*s))
             # check if wall is covered by another wall
             for event in self.game.active_events:
@@ -182,6 +182,7 @@ class Wall(Event):
         return False
 
     def handle_collision(self):
+        s = self.game.GAME_SIZE
         player = self.game.player
         moved_right = player.x - player.x_prev > 0
         moved_left = player.x - player.x_prev < 0
@@ -203,14 +204,14 @@ class Wall(Event):
         # If the player moved right into the wall
         if moved_right and player.x + player.width > self.x and player.x_prev + player.width <= self.x:
             # if "stairs" then dont collide. stairs are when bottom of player and top of wall have small difference
-            if player.y + player.height < self.y + 0.05 * self.game.size:
+            if player.y + player.height < self.y + 0.05 * s:
                 player.y = self.y - player.height
             else:
                 player.x = self.x - player.width - 0.001
         # If the player moved left into the wall
         if moved_left and player.x < self.x + self.width and player.x_prev >= self.x + self.width:
             # check stairs
-            if player.y + player.height < self.y + 0.05 * self.game.size:
+            if player.y + player.height < self.y + 0.05 * s:
                 player.y = self.y - player.height
             else:
                 player.x = self.x + self.width + 0.001
@@ -232,21 +233,22 @@ class Bullet(Event):
         self.generate()
 
     def generate(self):
-        s = self.game.size
+        s = self.game.GAME_SIZE
         self.width = 0.05 * s
         self.height = 0.05 * s
         
-        self.x = self.game.player.x + self.game.size + random.randint(0, self.game.size // 2)
+        self.x = self.game.player.x + s + random.randint(0, s // 2)
         # 50% chance for y to be between player position
         if random.random() < 0.5:
             self.y = self.game.player.y + random.randint(int(self.game.player.height*0.2), int(self.game.player.height*0.8))
         else:
-            self.y = random.randint(int(0.3*s), int(self.game.size - self.game.ground_height - 0.2*s))
+            self.y = random.randint(int(0.3*s), int(s - self.game.ground_height - 0.2*s))
 
     def frame_update_remove(self):
+        s = self.game.GAME_SIZE
         if self.x + self.width < self.game.camera_offset_x:
             return True
-        self.x -= 0.0075 * self.game.size  # Move the bullet leftwards
+        self.x -= 0.0075 * s  # Move the bullet leftwards
         if self.overlap(self.game.player):
             if self.game.player.star:
                 self.game.player.score += self.VALUE
@@ -278,15 +280,15 @@ class Lava(Event):
         self.generate(x, width)
     
     def generate(self, x=None, width=None):
-        s = self.game.size
+        s = self.game.GAME_SIZE
         self.height = self.game.ground_height
-        self.y = self.game.size - self.game.ground_height
+        self.y = s - self.game.ground_height
         if x and width:
             self.width = width
             self.x = x
         else:
             self.width = random.randint(int(0.05*s), int(0.12*s))
-            self.x = self.game.player.x + self.game.size + random.randint(0, self.game.size // 2)
+            self.x = self.game.player.x + s + random.randint(0, s // 2)
         
         # check if lava overlaps with other lava
         for event in self.game.active_events:
@@ -335,7 +337,7 @@ class Shuriken(Event):
         self.generate()
 
     def generate(self):
-        s = self.game.size
+        s = self.game.GAME_SIZE
         self.radius = 0.035 * s
         self.width = self.radius * 2
         self.height = self.radius * 2

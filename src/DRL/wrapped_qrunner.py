@@ -128,43 +128,22 @@ class RenderWrapper(gym.Wrapper):
         height, width, _ = obs.shape
         saliency_height, saliency_width = self.unwrapped.salience_map.shape
 
-        # Rescale the salience map to match the observation size if necessary
+        # Rescale if necessary
         if (height, width) != (saliency_height, saliency_width):
-            salience_map_resized = cv2.resize(self.unwrapped.salience_map, (width, height))
+            salience_map = cv2.resize(self.unwrapped.salience_map, (width, height))
         else:
-            salience_map_resized = self.unwrapped.salience_map
-
-        '''
-        # Normalize the salience values to the range [0, 1]
-        salience_map_normalized = cv2.normalize(salience_map_resized, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+            salience_map = self.unwrapped.salience_map
         
-        # Calculate percentiles
-        percentile_high = np.percentile(salience_map_normalized, 95)
-        percentile_low = np.percentile(salience_map_normalized, 5)
-
-        # Create masks based on the calculated percentiles
-        mask_above_threshold = salience_map_normalized >= percentile_high
-        mask_below_threshold = salience_map_normalized <= percentile_low
-
-        # Apply the threshold to determine where to overlay colors
-        obs[:, :, 0] = np.where(mask_below_threshold, np.clip(obs[:, :, 0] + (1 - salience_map_normalized) * 255, 0, 255), obs[:, :, 0])
-        obs[:, :, 1] = np.where(mask_above_threshold, np.clip(obs[:, :, 1] + (salience_map_normalized) * 255, 0, 255), obs[:, :, 1])
-        '''
-        
-        # Shift values so more extreme values are more visible
-        #salience_map_resized = np.power(salience_map_resized, 2.0)
-        # Transform to absolute and divide by the maximum
-        salience_map_absolute = np.abs(salience_map_resized)
-        salience_map_scaled = salience_map_absolute / np.max(salience_map_absolute)
+        salience_map = salience_map / np.max(salience_map)
 
         # Convert obs from RGB to BGR
         obs = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
 
         # Apply the colormap to the salience map
-        salience_map_colored = cv2.applyColorMap(np.uint8(salience_map_scaled * 255), cv2.COLORMAP_JET)
-        obs = cv2.addWeighted(obs, 1, salience_map_colored, 0.4, 0)
+        salience_map = cv2.applyColorMap(np.uint8(salience_map * 255), cv2.COLORMAP_JET)
+        obs = cv2.addWeighted(obs, 1, salience_map, 0.5, 0)
 
-        # ack to RGB afterwards
+        # back to RGB afterwards
         obs = cv2.cvtColor(obs, cv2.COLOR_BGR2RGB)
 
         return obs
@@ -201,13 +180,9 @@ class RenderWrapper(gym.Wrapper):
     
 
 # TODO: one giant custom wrapper with everything combined (maybe not framestack though)
-def wrapped_qrunner_env(size, frame_skip, frame_stack, record_video=False, human_render=False):
+def wrapped_qrunner_env( frame_skip, frame_stack, record_video=False, human_render=False):
     assert not (record_video and human_render), "Can not use record video and human render together"
-    
-    # Size is actual env size (for human render or video), while target_size is the rescaled size (for agent)
-    # TODO: more efficient to create env in target size, then upscale for human render and video
-    target_size = 84
-    env = QrunnerEnv(size=size)
+    env = QrunnerEnv()
     
     # TODO: 
     # Create own so own text, graphs, and even resized observations can be plotted.
@@ -233,15 +208,15 @@ def wrapped_qrunner_env(size, frame_skip, frame_stack, record_video=False, human
     
     #env = WarpFrame(env, width=size, height=size)  # Resize and grayscale
     
-    if size != target_size:
-        env = ResizeObservation(env, shape=(target_size, target_size))
+    #if size != target_size:
+    #    env = ResizeObservation(env, shape=(target_size, target_size))
     
     # Stack frames, SB3 doesn't allow cnn policy with obs: (x, 42, 42, 3)
     env = FrameStack(env, frame_stack)
     # TODO: test. but then walking right and collecting coin etc is equal?
     #env = ClipRewardEnv(env)
     
-    env = Reshape(env, target_size, frame_stack, 3)
+    env = Reshape(env, 84, frame_stack, 3)
 
     env = gym.wrappers.AutoResetWrapper(env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -251,7 +226,7 @@ def wrapped_qrunner_env(size, frame_skip, frame_stack, record_video=False, human
     return env
 
 def main():
-    env = wrapped_qrunner_env(size=84*6, frame_skip=4, frame_stack=4, record_video=False, human_render=True)
+    env = wrapped_qrunner_env(frame_skip=3, frame_stack=2, record_video=False, human_render=True)
     #check_env(env, warn=True)
     
     obs = env.reset()
@@ -267,6 +242,7 @@ def main():
             plt.imshow(obs, cmap='gray')
             plt.title(f"Frame {i}")
             cbar = plt.colorbar(orientation='horizontal')
+            plt.tight_layout()
             plt.savefig(f"{save_path}frame_{i}.png")
             plt.close()
     env.close()

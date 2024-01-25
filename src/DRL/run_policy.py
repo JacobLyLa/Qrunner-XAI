@@ -44,15 +44,16 @@ def compute_saliency_map(model, single_obs, action, q_values):
     model.zero_grad()
     chosen_q_value.backward()
 
-    # Extract and process gradients
-    gradients = single_obs.grad[0]  # First batch
+    # First batch and only batch
+    gradients = single_obs.grad[0]
+    # Sum over channels (RGB and frame stacks) 
     saliency_map = gradients.abs().sum(dim=0)
 
     return saliency_map.cpu().numpy()
 
-def compute_smoothgrad_saliency_map(model, batch_obs, action, num_samples=32, noise_level=0.05):
+def compute_smoothgrad_saliency_map(model, batch_obs, action, num_samples=4, noise_factor=0.01):
     # Generate noisy samples
-    noise = torch.randn((num_samples,) + batch_obs.shape) * noise_level * 255
+    noise = torch.randn((num_samples,) + batch_obs.shape) * noise_factor * 255
     noisy_samples = batch_obs + noise
     noisy_samples = noisy_samples.clamp(0, 255)
 
@@ -68,7 +69,7 @@ def compute_smoothgrad_saliency_map(model, batch_obs, action, num_samples=32, no
 
     # Backward pass
     model.zero_grad()
-    chosen_q_values.sum().backward()  # Sum to get a scalar for backward
+    chosen_q_values.sum().backward()
 
     # Extract and average gradients
     gradients = noisy_samples.grad  # Shape: (num_samples, C, H, W)
@@ -92,13 +93,14 @@ def random_policy(env):
 def main():
     record_video = False
     human_render = True
-    env_size = 84*6
+    env_size = 84#*6
     frame_skip = 3
     frame_stack = 2
     
-    env = wrapped_qrunner_env(size=env_size, frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render)
-    model = QNetwork(frame_stacks=frame_stack, model_path="runs/20240123-165010/model_1000000.pt")
-    dqn_policy(model, env, compute_saliency=True)
+    env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render)
+    #model = QNetwork(frame_stacks=frame_stack, model_path="runs/20240123-230249/model_4000000.pt")
+    #dqn_policy(model, env, compute_saliency=True)
+    random_policy(env)
     env.close()
 
 if __name__ == "__main__":
