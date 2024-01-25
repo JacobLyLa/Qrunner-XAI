@@ -39,7 +39,7 @@ if __name__ == "__main__":
     record_video = False
     human_render = False
     
-    gamma = 0.9 # 0.9 better than 0.99 for Qrunner, try decrease further
+    gamma = 0.95 # 0.9 better than 0.99 for Qrunner, try decrease further
     tau = 1.0 # 1.0 = hard update used in nature paper
     learning_rate = 0.0001
     target_network_frequency = 1000
@@ -48,10 +48,10 @@ if __name__ == "__main__":
     
     total_timesteps = 10_000_000
     learning_starts = 10_000 # Fill replaybuffer TODO: any other purpose?
-    buffer_size = 100_000 # Might need to reduce if memory issues on HPC
+    buffer_size = 500_000 # Might need to reduce if memory issues on HPC
     start_eps = 1.0 # 1
     end_eps = 0.05 # 0.01 - 0.05
-    duration_eps = 100_000
+    duration_eps = 500_000
     
     frame_skip = 3
     frame_stack = 2
@@ -101,7 +101,8 @@ if __name__ == "__main__":
     target_network = QNetwork(frame_stacks=frame_stack).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
-    env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render)
+    env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, human_render=human_render, record_video=record_video)
+    print("Observation space:", env.observation_space)
     rb = ReplayBuffer(
         buffer_size,
         env.observation_space,
@@ -109,7 +110,7 @@ if __name__ == "__main__":
         device,
         n_envs=1,
         optimize_memory_usage=True,
-        handle_timeout_termination=False,
+        handle_timeout_termination=False, # Can't use with optimize_memory_usage
     )
     obs, info = env.reset(seed=seed)
 

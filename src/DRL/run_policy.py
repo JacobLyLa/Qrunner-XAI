@@ -23,8 +23,8 @@ def dqn_policy(model, env, compute_saliency=False):
 
         # Compute saliency map if required
         if compute_saliency:
-            saliency_map = compute_saliency_map(model, single_obs, None, q_values)
-            #saliency_map = compute_smoothgrad_saliency_map(model, batch_obs, None)
+            saliency_map = compute_saliency_map(model, single_obs, action, q_values)
+            #saliency_map = compute_smoothgrad_saliency_map(model, batch_obs, action)
             env.unwrapped.set_salience(saliency_map)
 
         if random.random() < 0.01:
@@ -51,7 +51,7 @@ def compute_saliency_map(model, single_obs, action, q_values):
 
     return saliency_map.cpu().numpy()
 
-def compute_smoothgrad_saliency_map(model, batch_obs, action, num_samples=4, noise_factor=0.01):
+def compute_smoothgrad_saliency_map(model, batch_obs, action, num_samples=32, noise_factor=0.1):
     # Generate noisy samples
     noise = torch.randn((num_samples,) + batch_obs.shape) * noise_factor * 255
     noisy_samples = batch_obs + noise
@@ -93,13 +93,12 @@ def random_policy(env):
 def main():
     record_video = False
     human_render = True
-    env_size = 84#*6
     frame_skip = 3
     frame_stack = 2
     
     env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render)
-    #model = QNetwork(frame_stacks=frame_stack, model_path="runs/20240123-230249/model_4000000.pt")
-    #dqn_policy(model, env, compute_saliency=True)
+    model = QNetwork(frame_stacks=frame_stack, model_path="runs/20240125-165341/model_100000.pt")
+    dqn_policy(model, env, compute_saliency=True)
     random_policy(env)
     env.close()
 

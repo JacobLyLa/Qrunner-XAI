@@ -4,8 +4,9 @@ import torch.nn as nn
 # Architecture inspired from:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
 
-# Expects input of shape (batch_size, frame_stacks*frame_stacks, 84, 84)
+# Expects input of shape (batch_size, frame_stacks*colors, 84, 84)
 # Outputs of shape (batch_size, actions)
+# TODO: Try 3d convolutions (batch_size, frame_stacks, colors, 84, 84)
 class QNetwork(nn.Module):
     def __init__(self, frame_stacks=4, colors=3, actions=5, model_path=None):
         super().__init__()
@@ -28,6 +29,9 @@ class QNetwork(nn.Module):
 
     def forward(self, x, return_acts=False):
         x = x / 255.0
+        # Transepose x so channel first
+        # TODO: temp fix, change wrappers to return channel first
+        x = x.permute(0, 3, 1, 2)
         activations = {}
         for idx, (name, layer) in enumerate(self.network.named_children()):
             x = layer(x)
