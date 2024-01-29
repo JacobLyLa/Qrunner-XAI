@@ -23,7 +23,7 @@ class QrunnerEnv(gym.Env):
         
         self.reward_per_screen = 0.5
         self.start_event_frequency = 0.5 * self.GAME_SIZE # New event every %screen
-        self.end_event_frequency = 0.05 * self.GAME_SIZE # New event every %screen
+        self.end_event_frequency = 0.1 * self.GAME_SIZE # New event every %screen
         self.event_frequency_update = 2 * self.GAME_SIZE # Event frequency is reduced by 1 every %screen
         self.camera_lock_x = self.GAME_SIZE // 3
         
@@ -36,8 +36,8 @@ class QrunnerEnv(gym.Env):
         self.gravity = 0.2
         
         # Pygame stuff
-        self.sky_color_start = (135, 206, 250)
-        self.sky_color_end = (90, 5, 5)
+        self.sky_color_start = (140, 210, 250)
+        self.sky_color_end = (140, 100, 200)
         self.ground_color = (40, 200, 20)
         self.available_events = [Bullet, Coin, Lava, Wall]
         self.event_weights = [event.WEIGHT for event in self.available_events]

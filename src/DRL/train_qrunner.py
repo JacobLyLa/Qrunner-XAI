@@ -12,6 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src.DRL.qnetwork import QNetwork
 from src.DRL.wrapped_qrunner import wrapped_qrunner_env
+from tqdm import tqdm
 
 # Inspired by:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
@@ -39,7 +40,7 @@ if __name__ == "__main__":
     record_video = False
     human_render = False
     
-    gamma = 0.95 # 0.9 better than 0.99 for Qrunner, try decrease further
+    gamma = 0.98 # 0.9 better than 0.99 for Qrunner, try decrease further
     tau = 1.0 # 1.0 = hard update used in nature paper
     learning_rate = 0.0001
     target_network_frequency = 1000
@@ -47,14 +48,14 @@ if __name__ == "__main__":
     train_frequency = 4
     
     total_timesteps = 10_000_000
-    learning_starts = 10_000 # Fill replaybuffer TODO: any other purpose?
-    buffer_size = 100_000 # Might need to reduce if memory issues on HPC
+    learning_starts = 50_000 # Fill replaybuffer TODO: any other purpose?
+    buffer_size = 200_000 # Might need to reduce if memory issues on HPC
     start_eps = 1.0 # 1
     end_eps = 0.05 # 0.01 - 0.05
     duration_eps = 100_000
     
-    frame_skip = 3
-    frame_stack = 2
+    frame_skip = 4
+    frame_stack = 4
 
     if log_checkpoints:
         log_increment = math.log10(total_timesteps)
@@ -96,9 +97,10 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
 
-    q_network = QNetwork(frame_stacks=frame_stack).to(device)
+    use_3d = False
+    q_network = QNetwork(frame_stacks=frame_stack, use_3d=use_3d).to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
-    target_network = QNetwork(frame_stacks=frame_stack).to(device)
+    target_network = QNetwork(frame_stacks=frame_stack, use_3d=use_3d).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
     env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, human_render=human_render, record_video=record_video)
@@ -115,7 +117,7 @@ if __name__ == "__main__":
     obs, info = env.reset(seed=seed)
 
     start_time = time.time()
-    for global_step in range(total_timesteps + 1):
+    for global_step in tqdm(range(total_timesteps)):
         # Determine action
         epsilon = ls.step()
         if random.random() < epsilon:
@@ -132,7 +134,7 @@ if __name__ == "__main__":
 
         # Record end of episode stats
         if "episode" in info:
-            print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+            # print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
             writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
             writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
             writer.add_scalar("charts/epsilon", epsilon, global_step)

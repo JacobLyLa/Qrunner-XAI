@@ -204,7 +204,7 @@ class RenderWrapper(gym.Wrapper):
         self.min_scale = min(min(q_values), self.min_scale)
         if not self.initialized:
             self.initialize_plot()
-        self.update_plot()
+        #self.update_plot()
         
     def initialize_plot(self):
         plt.ion()
@@ -279,7 +279,7 @@ class RenderWrapper(gym.Wrapper):
         
         salience_map = gaussian_filter(salience_map, sigma=8)
         salience_map = salience_map / np.max(salience_map)
-        salience_map[salience_map < 0.7] = 0
+        salience_map[salience_map < 0.5] = 0
 
         # Convert obs from RGB to BGR
         obs = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
