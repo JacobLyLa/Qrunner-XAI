@@ -61,7 +61,6 @@ class QrunnerEnv(gym.Env):
         
         self.player = Player(self.camera_lock_x, self.GAME_SIZE - self.ground_height - self.player_height, self.player_width, self.player_height, self.velocity_x, self.velocity_y)
         self.game_over = False
-        self.spawned_events = 0
         self.active_events = []
 
         self.difficulty = 0

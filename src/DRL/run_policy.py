@@ -91,17 +91,6 @@ def random_policy(env):
             total_episodes += 1
     print(f"Average reward: {total_reward / total_episodes}")
 
-def find_newest_model(base_path):
-    # Find newest directory
-    newest_dir = sorted([d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))], 
-                        key=lambda x: x.split('/')[-1], reverse=True)[0]
-
-    # Find model with highest steps
-    model_files = [f for f in os.listdir(os.path.join(base_path, newest_dir)) if f.endswith('.pt')]
-    newest_model = sorted(model_files, key=lambda x: int(re.search('model_(\d+).pt', x).group(1)), reverse=True)[0]
-
-    return os.path.join(base_path, newest_dir, newest_model)
-
 def main():
     record_video = False
     human_render = True
@@ -110,13 +99,13 @@ def main():
     newest = True
     standard_path = "runs/20240125-235727/model_8000000.pt"
     
-    env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render, scale=6)
-
-    model_path = find_newest_model("runs") if newest else standard_path
+    model_path = QNetwork.find_newest_model() if newest else standard_path
     print(f"Using model: {model_path}")
-    model = QNetwork(frame_stacks=frame_stack, use_3d=False, model_path=model_path)
+    model = QNetwork(frame_stacks=frame_stack, model_path=model_path)
+    
+    env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, record_video=record_video, human_render=human_render, scale=6)
     dqn_policy(model, env, compute_saliency=True)
-    random_policy(env)
+    #random_policy(env)
     env.close()
 
 if __name__ == "__main__":

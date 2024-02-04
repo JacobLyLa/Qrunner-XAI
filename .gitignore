@@ -24,6 +24,7 @@ events.out.tfevents.*
 
 # Ignore pickle files
 *.pickle
+*.pkl
 
 # Ignore venv
 venv/

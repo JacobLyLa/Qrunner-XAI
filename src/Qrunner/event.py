@@ -88,16 +88,19 @@ class Coin(Event):
             )[0]
 
         if coin_type == 'gold':
+            self.good = True
             self.color = Coin.GOLD
             self.value = 1
             self.radius = 0.03 * s
             
         elif coin_type == 'blue':
+            self.good = True
             self.color = Coin.BLUE
             self.value = 0.2
             self.radius = 0.03 * s
             
         elif coin_type == 'red':
+            self.good = False
             self.color = Coin.RED
             self.value = -0.2
             self.radius = 0.03 * s

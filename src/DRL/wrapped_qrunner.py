@@ -178,10 +178,6 @@ class HumanRendering(gym.Wrapper):
             pygame.display.quit()
             pygame.quit()
 
-
-# TODO: New window with graphs
-# But this method can still be used for saliency maps?
-# TODO: this wrapper should be combined with human rendering wrapper
 class RenderWrapper(gym.Wrapper):
     def __init__(self, env, length):
         gym.Wrapper.__init__(self, env)
@@ -204,7 +200,7 @@ class RenderWrapper(gym.Wrapper):
         self.min_scale = min(min(q_values), self.min_scale)
         if not self.initialized:
             self.initialize_plot()
-        #self.update_plot()
+        self.update_plot()
         
     def initialize_plot(self):
         plt.ion()
@@ -279,14 +275,14 @@ class RenderWrapper(gym.Wrapper):
         
         salience_map = gaussian_filter(salience_map, sigma=8)
         salience_map = salience_map / np.max(salience_map)
-        salience_map[salience_map < 0.5] = 0
+        salience_map[salience_map < 0.3] = 0
 
         # Convert obs from RGB to BGR
         obs = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
 
         # Apply the colormap to the salience map
         salience_map = cv2.applyColorMap(np.uint8(salience_map * 255), cv2.COLORMAP_JET)
-        obs = cv2.addWeighted(obs,1, salience_map, 0.3, 0)
+        obs = cv2.addWeighted(obs, 1, salience_map, 0.3, 0)
 
         # back to RGB afterwards
         obs = cv2.cvtColor(obs, cv2.COLOR_BGR2RGB)

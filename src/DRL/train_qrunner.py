@@ -97,10 +97,9 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
 
-    use_3d = False
-    q_network = QNetwork(frame_stacks=frame_stack, use_3d=use_3d).to(device)
+    q_network = QNetwork(frame_stacks=frame_stack).to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
-    target_network = QNetwork(frame_stacks=frame_stack, use_3d=use_3d).to(device)
+    target_network = QNetwork(frame_stacks=frame_stack).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
     env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, human_render=human_render, record_video=record_video)
@@ -188,8 +187,8 @@ if __name__ == "__main__":
                 sps = int(global_step / (time.time() - start_time))
                 writer.add_scalar("charts/SPS", sps, global_step)
             
-            # Possibly save model
-            if global_step in save_points:
-                torch.save(q_network.state_dict(), f"{model_path}/model_{global_step}.pt")
-                print(f"Saved checkpoint: {global_step}")
+        # Possibly save model
+        if global_step in save_points:
+            torch.save(q_network.state_dict(), f"{model_path}/model_{global_step}.pt")
+            print(f"Saved checkpoint: {global_step}")
     env.close()

@@ -1,44 +1,74 @@
+import os
+import pickle
 import random
 
 import numpy as np
+import torch
 
 
 class Concept:
-    def __init__(self, name, binary, value_function):
+    def __init__(self, name, binary, concept_function):
         self.name = name
         self.binary = binary
-        self.value_function = value_function 
-        self.path = f"../concepts/{name}"
+        self.concept_function = concept_function 
+        self.folder_path = f"concepts/{name}/"
+        
+        # If folder does not exist, create it
+        if not os.path.exists(self.folder_path):
+            os.makedirs(self.folder_path)
+            
+    def summary(self):
+        print('Concept:', self.name)
+        print('binary:', self.binary)
+        print('train:', self.train_obs.shape, self.train_values.shape)
+        print('test:', self.test_obs.shape, self.test_values.shape)
 
-    def _prepare_binary_data(self, game_steps, train_size, test_size):
+        
+    def save_torch_probe(self, probe, model_name, layer, score):
+        # Remove .pt files in folder
+        files = os.listdir(self.folder_path)
+        for file in files:
+            if file.endswith(".pt"):
+                os.remove(os.path.join(self.folder_path, file))
+        torch.save(probe, f"{self.folder_path}{model_name}-{layer}-{round(score,3)}.pt")
+        
+    def load_torch_probe(self):
+        # Find only .pt file in folder
+        files = os.listdir(self.folder_path)
+        for file in files:
+            if file.endswith(".pt"):
+                score = float(file.split("-")[-1].split(".pt")[0])
+                return torch.load(os.path.join(self.folder_path, file)), score
+        
+    def _prepare_binary_data(self, env_steps, train_size, test_size):
         presence = []
         absence = []
-        sufficent = False
-        for game_step in game_steps:
-            if self.value_function(game_step.state_variables):
+        sufficent_samples = False
+        # Append game steps to presence or absence until sufficent samples
+        for game_step in env_steps:
+            if self.concept_function(game_step.state_variables):
                 presence.append(game_step)
             else:
                 absence.append(game_step)
             min_length = min(len(presence), len(absence))
             # enough samples for both classes
             if min_length * 2 >= train_size + test_size:
-                sufficent = True
+                sufficent_samples = True
                 break
 
-        if not sufficent:
-            # update train_size and test_size to maximum and same ratio
+        if not sufficent_samples:
+            # Update train_size and test_size to maximum and same ratio
             ratio = train_size / (train_size + test_size)
-            total_data = 2*min_length
+            total_data = 2 * min_length
             train_size = int(total_data*ratio)
             test_size = total_data - train_size
 
-        # cut off the longer list to make them equal length
-        if min_length == 0:
-            assert False, "No data for concept"
+        # Slice the longer list to make them equal length
+        assert min_length != 0, f"[{self.name}] No samples for one of the classes"
         presence = random.sample(presence, min_length)
         absence = random.sample(absence, min_length)
 
-        # split the data, keeping the classes balanced
+        # Split the data, keeping the classes balanced
         class_train_size = train_size//2
         class_test_size = test_size//2
 
@@ -54,42 +84,55 @@ class Concept:
 
         return train_data, test_data, y_train, y_test
 
-    def _prepare_non_binary_data(self, game_steps, train_size, test_size):        
+    def _prepare_non_binary_data(self, env_steps, train_size, test_size):        
         values = []
         for i in range(train_size + test_size):
-            values.append(self.value_function(game_steps[i].state_variables))
+            values.append(self.concept_function(env_steps[i].state_variables))
 
-        # scale by standard deviation to use similar regularization for all concepts
         values = np.array(values)
-        values = values / np.std(values)
+        # Scale by std to use similar regularization for all concepts
+        #values = values / np.std(values)
 
-        # split the data
-        game_steps = game_steps[:train_size + test_size]
-        train_data = game_steps[:train_size]
-        test_data = game_steps[train_size:]
+        # Train test split
+        env_steps = env_steps[:train_size + test_size]
+        train_data = env_steps[:train_size]
+        test_data = env_steps[train_size:]
         y_train = values[:train_size]
         y_test = values[train_size:]
 
         return train_data, test_data, y_train, y_test
 
-    def prepare_data(self, game_steps, test_ratio=0.2, max_size=None):
-        if not max_size or max_size > len(game_steps):
-            max_size = len(game_steps)
+    def prepare_data(self, env_steps, test_ratio=0.2, max_size=None):
+        '''
+        Prepare data for the concept
+        Access the data through train_/test_ + obs/images/values
+        Obs: network input
+        Images: network input in human readable image format
+        Values: concept values
+        '''
+        if not max_size or max_size > len(env_steps):
+            max_size = len(env_steps)
 
         train_size = int(max_size*(1-test_ratio))
         test_size = int(max_size*test_ratio)
 
-        np.random.shuffle(game_steps)
+        np.random.shuffle(env_steps)
         if self.binary:
-            train_data, test_data, y_train, y_test = self._prepare_binary_data(game_steps, train_size, test_size)
+            train_data, test_data, y_train, y_test = self._prepare_binary_data(env_steps, train_size, test_size)
         else:
-            train_data, test_data, y_train, y_test = self._prepare_non_binary_data(game_steps, train_size, test_size)
+            train_data, test_data, y_train, y_test = self._prepare_non_binary_data(env_steps, train_size, test_size)
 
-        self.train_data = np.array(train_data) # can be used for forcing autoencoder to learn ball position
-        self.test_data = np.array(test_data) # can be used for sorting
+        self.train_data = np.array(train_data)
+        self.test_data = np.array(test_data)
         self.train_obs = np.array([game_step.observation for game_step in train_data])
         self.test_obs = np.array([game_step.observation for game_step in test_data])
         self.train_images = np.array([game_step.image for game_step in train_data])
         self.test_images = np.array([game_step.image for game_step in test_data])
         self.train_values = np.array(y_train)
         self.test_values = np.array(y_test)
+        
+    @staticmethod
+    def load_concept_data():
+        with open('data/env_steps.pickle', 'rb') as f:
+            env_steps = pickle.load(f)
+        return env_steps
