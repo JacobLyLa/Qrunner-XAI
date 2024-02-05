@@ -126,6 +126,7 @@ def train_probes(model, concept, hyperparams, layers):
     hyperparam_tuning = False
     if isinstance(hyperparams, list):
         hyperparam_tuning = True
+        best_hyperparams = []
         
     acts_dict_train_test, train_values, test_values = create_data(model, concept)
     layer_probes = {}
@@ -134,7 +135,6 @@ def train_probes(model, concept, hyperparams, layers):
         train_acts = acts_dict_train_test[layer]['train_acts']
         test_acts = acts_dict_train_test[layer]['test_acts']
         if hyperparam_tuning:
-            best_hyperparams = []
             best_probe = None
             best_hyperparam = None
             best_info = None
