@@ -1,4 +1,6 @@
+import itertools
 import math
+import os
 import random
 import time
 from datetime import datetime
@@ -9,10 +11,10 @@ import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.nn.functional import mse_loss
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from src.DRL.qnetwork import QNetwork
 from src.DRL.wrapped_qrunner import wrapped_qrunner_env
-from tqdm import tqdm
 
 # Inspired by:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
@@ -33,79 +35,88 @@ class LinearSchedule:
         self.step_count += 1
         return value
 
+def random_hyperparam_sample(hyperparam_ranges):
+    sample = {}
+    for param, values in hyperparam_ranges.items():
+        discrete = values[-1]
+        values = values[:-1]
+        if discrete:
+            sample[param] = random.choice(values)
+        elif len(values) == 2:
+            if all(isinstance(v, float) for v in values):
+                sample[param] = random.uniform(values[0], values[1])
+            else:
+                sample[param] = random.randint(values[0], values[1])
+    return sample
+
+# Ints -> Discrete sample
+# 2 Floats -> Uniform sample
+# Last bool: discrete (choice)
+hyperparam_ranges = {
+    "gamma": (0.9, 0.99, False),
+    "tau": (0.9, 1.0, False),
+    "learning_rate": (0.00001, 0.001, False),
+    "target_network_frequency": (500, 2000, False),
+    "batch_size": (16, 32, 64, 128, 256, True),
+    "train_frequency": (2, 32, False),
+    "total_timesteps": (100_000, True),
+    "learning_starts": (1000, 50000, False),
+    "buffer_size": (100_000, True),
+    "start_eps": (1.0, True),
+    "end_eps": (0.01, 0.05, False),
+    "duration_eps": (5000, 200_000, False),
+    "frame_skip": (2, 8, False),
+    "frame_stack": (2, 4, False),
+}
+
 if __name__ == "__main__":
-    seed = 0
-    num_checkpoints = 10 # Includes 0 step model, so num_checkpoints + 1 are saved
-    log_checkpoints = False
-    record_video = False
-    human_render = False
-    
-    gamma = 0.98 # 0.9 better than 0.99 for Qrunner, try decrease further
-    tau = 1.0 # 1.0 = hard update used in nature paper
-    learning_rate = 0.0001
-    target_network_frequency = 1000
-    batch_size = 32
-    train_frequency = 4
-    
-    total_timesteps = 10_000_000
-    learning_starts = 50_000 # Fill replaybuffer TODO: any other purpose?
-    buffer_size = 200_000 # Might need to reduce if memory issues on HPC
-    start_eps = 1.0 # 1
-    end_eps = 0.05 # 0.01 - 0.05
-    duration_eps = 100_000
-    
-    frame_skip = 4
-    frame_stack = 4
+    task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device:", device)
 
-    if log_checkpoints:
-        log_increment = math.log10(total_timesteps)
-        log_step_size = log_increment / num_checkpoints
-        save_points = [0] + [int(10 ** (log_step_size * i)) for i in range(1, num_checkpoints + 1)]
-    else:
-        save_points = [int(total_timesteps / num_checkpoints) * i for i in range(num_checkpoints + 1)]
-    print(f"Saving checkpoints: {save_points}")
-
-    ls = LinearSchedule(start_eps, end_eps, duration_eps)
-
-    date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_name = str(date)
-    model_path = f"runs/{run_name}"
-
-    writer = SummaryWriter(model_path)
-    writer.add_text(
-        "hyperparameters",
-        f"buffer_size: {buffer_size}\n"
-        f"gamma: {gamma}\n"
-        f"tau: {tau}\n"
-        f"learning_rate: {learning_rate}\n"
-        f"seed: {seed}\n"
-        f"total_timesteps: {total_timesteps}\n"
-        f"start_eps: {start_eps}\n"
-        f"end_eps: {end_eps}\n"
-        f"target_network_frequency: {target_network_frequency}\n"
-        f"learning_starts: {learning_starts}\n"
-        f"train_frequency: {train_frequency}\n"
-        f"batch_size: {batch_size}\n"
-        f"run_name: {run_name}\n"
-    )
-
+    seed = random.randint(0, 1000000) # Saved for reproduction
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    
+    num_checkpoints = 10 # + step 0
+    log_checkpoints = False
+    record_video = False
+    human_render = False
+    
+    hyperparams = random_hyperparam_sample(hyperparam_ranges)
+    hyperparams['seed'] = seed
+    print(f"Using hyperparams:")
+    print(hyperparams)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Device:", device)
+    if log_checkpoints:
+        log_increment = math.log10(hyperparams['total_timesteps'])
+        log_step_size = log_increment / num_checkpoints
+        save_points = [0] + [int(10 ** (log_step_size * i)) for i in range(1, num_checkpoints + 1)]
+    else:
+        save_points = [int(hyperparams['total_timesteps'] / num_checkpoints) * i for i in range(num_checkpoints + 1)]
+    print(f"Saving checkpoints: {save_points}")
 
-    q_network = QNetwork(frame_stacks=frame_stack).to(device)
-    optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
-    target_network = QNetwork(frame_stacks=frame_stack).to(device)
+    ls = LinearSchedule(hyperparams['start_eps'], hyperparams['end_eps'], hyperparams['duration_eps'])
+
+    date = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_name = str(date)
+    model_path = f"runs/{run_name}_task_{task_id}"
+
+    writer = SummaryWriter(model_path)
+    writer.add_text("hyperparameters", str(hyperparams))
+
+    q_network = QNetwork(frame_stacks=hyperparams['frame_stack']).to(device)
+    optimizer = optim.Adam(q_network.parameters(), lr=hyperparams['learning_rate'])
+    target_network = QNetwork(frame_stacks=hyperparams['frame_stack']).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
-    env = wrapped_qrunner_env(frame_skip=frame_skip, frame_stack=frame_stack, human_render=human_render, record_video=record_video)
-    print("Observation space:", env.observation_space)
+    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'], frame_stack=hyperparams['frame_stack'], human_render=human_render, record_video=record_video)
     rb = ReplayBuffer(
-        buffer_size,
+        hyperparams['buffer_size'],
         env.observation_space,
         env.action_space,
         device,
@@ -116,8 +127,8 @@ if __name__ == "__main__":
     obs, info = env.reset(seed=seed)
 
     start_time = time.time()
-    for global_step in tqdm(range(total_timesteps)):
-        # Determine action
+    for global_step in tqdm(range(hyperparams['total_timesteps'])):
+        # Determine and perform action
         epsilon = ls.step()
         if random.random() < epsilon:
             action = env.action_space.sample()
@@ -127,8 +138,6 @@ if __name__ == "__main__":
             reshaped_obs = tensor_obs.unsqueeze(0)
             q_values = q_network(reshaped_obs)
             action = q_values.argmax(dim=1).item()
-
-        # Take action
         next_obs, reward, terminated, truncated, info = env.step(action)
 
         # Record end of episode stats
@@ -146,9 +155,9 @@ if __name__ == "__main__":
         obs = next_obs
 
         # Possibly train
-        if global_step >= learning_starts:
-            if global_step % train_frequency == 0:
-                data = rb.sample(batch_size)
+        if global_step >= hyperparams['learning_starts']:
+            if global_step % hyperparams['train_frequency'] == 0:
+                data = rb.sample(hyperparams['batch_size'])
                 with torch.no_grad():
                     next_observation_q_values = target_network(data.next_observations)
                     # Extract maximum Q-value for each next observation.
@@ -156,7 +165,7 @@ if __name__ == "__main__":
                     
                     # Calculate the TD target for each observation.
                     # If episode ends (done flag is 1), the future Q-value is not considered.
-                    future_values = gamma * target_max_q_values * (1 - data.dones.flatten())
+                    future_values = hyperparams['gamma'] * target_max_q_values * (1 - data.dones.flatten())
                     td_targets = data.rewards.flatten() + future_values
 
                 # Compute Q-values of current observations using the main Q-network.
@@ -174,10 +183,10 @@ if __name__ == "__main__":
                 optimizer.step()
 
             # Update target network
-            if global_step % target_network_frequency == 0:
+            if global_step % hyperparams['target_network_frequency'] == 0:
                 for target_network_param, q_network_param in zip(target_network.parameters(), q_network.parameters()):
                     target_network_param.data.copy_(
-                        tau * q_network_param.data + (1.0 - tau) * target_network_param.data
+                        hyperparams['tau'] * q_network_param.data + (1.0 - hyperparams['tau']) * target_network_param.data
                     )
 
             # Log non-episodic metrics
