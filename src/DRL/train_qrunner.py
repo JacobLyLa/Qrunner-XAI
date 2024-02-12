@@ -11,12 +11,11 @@ import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.nn.functional import mse_loss
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 from src.DRL.qnetwork import QNetwork
 from src.DRL.wrapped_qrunner import wrapped_qrunner_env
 
-# Inspired by:
+# Based on:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
 
 
@@ -57,24 +56,25 @@ hyperparam_ranges = {
     "tau": (0.9, 1.0, False),
     "learning_rate": (0.00001, 0.001, False),
     "target_network_frequency": (500, 2000, False),
-    "batch_size": (16, 32, 64, 128, 256, True),
+    "batch_size": (16, 32, 64, 128, True),
     "train_frequency": (2, 32, False),
     "total_timesteps": (100_000, True),
-    "learning_starts": (1000, 50000, False),
-    "buffer_size": (100_000, True),
+    "learning_starts": (10000, 20000, False),
+    "buffer_size": (50_000, True),
     "start_eps": (1.0, True),
     "end_eps": (0.01, 0.05, False),
-    "duration_eps": (5000, 200_000, False),
+    "duration_eps": (10000, 100_000, False),
     "frame_skip": (2, 8, False),
-    "frame_stack": (2, 4, False),
+    "frame_stack": (2, True),
 }
 
 if __name__ == "__main__":
     task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0')
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() and False else "cpu")
     print("Device:", device)
 
-    seed = random.randint(0, 1000000) # Saved for reproduction
+    # seed = random.randint(0, 1000000) # Saved for reproducibility
+    seed = 0
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -124,10 +124,12 @@ if __name__ == "__main__":
         optimize_memory_usage=True,
         handle_timeout_termination=False, # Can't use with optimize_memory_usage
     )
+    print((rb.observations.nbytes + rb.actions.nbytes + rb.rewards.nbytes + rb.dones.nbytes) / 1e9, "GB", flush=True)
+    
     obs, info = env.reset(seed=seed)
-
     start_time = time.time()
-    for global_step in tqdm(range(hyperparams['total_timesteps'])):
+    
+    for global_step in range(hyperparams['total_timesteps'] + 1):
         # Determine and perform action
         epsilon = ls.step()
         if random.random() < epsilon:
@@ -142,7 +144,6 @@ if __name__ == "__main__":
 
         # Record end of episode stats
         if "episode" in info:
-            # print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
             writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
             writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
             writer.add_scalar("charts/epsilon", epsilon, global_step)
@@ -191,8 +192,8 @@ if __name__ == "__main__":
 
             # Log non-episodic metrics
             if global_step % 1000 == 0:
-                writer.add_scalar("losses/td_loss", loss, global_step)
-                writer.add_scalar("losses/q_values", action_q_values.mean(), global_step)
+                writer.add_scalar("charts/td_loss", loss, global_step)
+                writer.add_scalar("charts/q_values", action_q_values.mean(), global_step)
                 sps = int(global_step / (time.time() - start_time))
                 writer.add_scalar("charts/SPS", sps, global_step)
             
