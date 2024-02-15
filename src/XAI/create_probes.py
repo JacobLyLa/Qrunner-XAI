@@ -55,7 +55,7 @@ def get_hyperparams_list(lr, batch_size, lambda_l1, patience, epochs):
 
 # TODO: rename to train_probes
 if __name__ == '__main__':
-    lr = (0.1, 0.01, 0.001, 0.0001)
+    lr = (0.1, 0.01, 0.001)
     batch_size = (64, 256, 512)
     step_size = 5000
     layer = 4
@@ -72,7 +72,7 @@ if __name__ == '__main__':
         concept.prepare_data(env_steps, max_size=step_size)
         concept.summary()
         
-        layer_probes, layer_info = train_probes(model, concept, hyperparams, [layer])
-        print(f'Layer {layer} | Test score: {layer_info[layer]["test_score"][-1]:.3f}')
+        layer_probes, layer_info, best_hyperparams = train_probes(model, concept, hyperparams, [layer])
+        print(f'Layer {layer} | Test score: {layer_info[layer]["test_score"][-1]:.3f} | Best hyperparams: {best_hyperparams}')
         save_plot(concept, layer_info[layer])
         concept.save_torch_probe(layer_probes[layer], model.model_name, layer, layer_info[layer]['test_score'][-1])

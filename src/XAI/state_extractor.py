@@ -34,7 +34,10 @@ class StateExtractorWrapper(gym.Wrapper):
         self.state_variables['player fall velocity'] = self.env.unwrapped.player.gravity_count
         self.state_variables['player standing on wall'] = self.env.unwrapped.player.standing_on != None
         self.state_variables['player x position'] = self.env.unwrapped.player.x
-        self.state_variables['player y position'] = self.env.unwrapped.player.y
+        if not self.state_variables['player dodging']:
+            self.state_variables['player y position'] = self.env.unwrapped.player.y
+        else:
+            self.state_variables['player y position'] = self.env.unwrapped.player.y - self.env.unwrapped.player.height
         
         self.state_variables['camera x offset'] = self.env.unwrapped.camera_offset_x
 
@@ -68,12 +71,12 @@ class StateExtractorWrapper(gym.Wrapper):
                         self.state_variables['two close bullets'] = True
                         break
         
-        # Bullet player distance
-        self.state_variables['bullet player distance'] = 84
+        # Bullet close
+        self.state_variables['bullet close'] = 0
         for event in visible_events:
             if type(event).__name__ == 'Bullet':
-                self.state_variables['bullet player distance'] = min(self.state_variables['bullet player distance'], 
-                                                                     euclidean_distance(event.x, event.y, 
+                self.state_variables['bullet close'] = max(self.state_variables['bullet close'], 
+                                                                     84 - euclidean_distance(event.x, event.y, 
                                                                                          self.state_variables['player x position'], 
                                                                                          self.state_variables['player y position']))
                 
@@ -85,12 +88,38 @@ class StateExtractorWrapper(gym.Wrapper):
                     self.state_variables['bullet aligned with player'] = True
                     break
                 
+        # Coin above lava
+        self.state_variables['coin above lava'] = False
+        for event in visible_events:
+            if type(event).__name__ == 'Coin':
+                for e in visible_events:
+                    if type(e).__name__ == 'Lava' and e.x < event.x and e.x + e.width > event.x:
+                        self.state_variables['coin above lava'] = True
+                        break
+                    
+        # Lava below player
+        self.state_variables['lava below player'] = False
+        for event in visible_events:
+            if type(event).__name__ == 'Lava':
+                if event.x < self.state_variables['player x position'] and event.x + event.width > self.state_variables['player x position']:
+                    self.state_variables['lava below player'] = True
+                    break
+                
+        # Bullet below player
+        self.state_variables['bullet below player'] = False
+        for event in visible_events:
+            if type(event).__name__ == 'Bullet':
+                if self.env.unwrapped.player.y + self.env.unwrapped.player.height < event.y + event.height:
+                    if event.x < self.state_variables['player x position'] and event.x + event.width > self.state_variables['player x position']:
+                        self.state_variables['bullet below player'] = True
+                        break
+                        
         self.state_variables['episode steps'] += 1
         self.total_steps += 1
         
         # If there are some special states, then save anyway
         special = False
-        if self.state_variables['player dodging']:
+        if self.state_variables['bullet below player'] or self.state_variables['lava below player'] or self.state_variables['two close bullets']:
             special = True        
     
         # Check if this step will be saved

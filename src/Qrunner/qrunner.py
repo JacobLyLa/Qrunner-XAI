@@ -52,7 +52,8 @@ class QrunnerEnv(gym.Env):
         # Internal surface for game logic (fixed size)
         self.surface = pygame.Surface((self.GAME_SIZE, self.GAME_SIZE))
         
-    def get_action_meanings(self):
+    @staticmethod
+    def get_action_meanings():
         return ['NOOP', 'LEFT', 'RIGHT', 'JUMP', 'DODGE']
 
     def reset(self, seed=None, options=None):

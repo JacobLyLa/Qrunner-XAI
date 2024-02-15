@@ -10,7 +10,7 @@ from src.DRL.wrapped_qrunner import wrapped_qrunner_env
 from src.XAI.state_extractor import StateExtractorWrapper
 
 if __name__ == '__main__':
-    play_iterations = 50_000
+    play_iterations = 20_000
     num_data_points = 10_000
     epsilon = 0.05 # Probability of taking a random action
     # TODO: Given a model path, let model save hyperparams like frame_stack, frame_skip, etc.
@@ -19,7 +19,7 @@ if __name__ == '__main__':
     frame_skip = 4
     frame_stack = 4
     newest = True
-    standard_path = "runs/20240125-235727/model_8000000.pt"
+    standard_path = "runs/20240128-235322/model_10000000.pt"
     
     model_path = QNetwork.find_newest_model() if newest else standard_path
     print(f"Using model: {model_path}")

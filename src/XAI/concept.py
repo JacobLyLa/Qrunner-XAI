@@ -39,6 +39,7 @@ class Concept:
             if file.endswith(".pt"):
                 score = float(file.split("-")[-1].split(".pt")[0])
                 return torch.load(os.path.join(self.folder_path, file)), score
+        return None, 0
         
     def _prepare_binary_data(self, env_steps, train_size, test_size):
         presence = []
