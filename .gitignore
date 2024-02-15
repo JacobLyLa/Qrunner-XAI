@@ -29,3 +29,6 @@ events.out.tfevents.*
 # Ignore venv
 venv/
 .venv/
+
+# Ignore slurm output files
+*.txt
