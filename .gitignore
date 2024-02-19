@@ -32,3 +32,6 @@ venv/
 
 # Ignore slurm output files
 *.txt
+
+# Ignore ZIP files likes the ones from SB3
+*.zip

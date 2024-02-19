@@ -63,8 +63,9 @@ class QNetwork(nn.Module):
     @staticmethod
     def find_newest_model():
         base_path = 'runs'
-        newest_dir = sorted([d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))], 
+        newest_dir = sorted([d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d)) and d != "sb3"], 
                             key=lambda x: x.split('/')[-1], reverse=True)[0]
+
 
         # Find model with highest steps
         model_files = [f for f in os.listdir(os.path.join(base_path, newest_dir)) if f.endswith('.pt')]
