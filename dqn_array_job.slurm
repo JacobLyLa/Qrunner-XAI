@@ -1,9 +1,10 @@
 #!/bin/bash
 #SBATCH --account=ie-idi
 #SBATCH --nodes=1
-#SBATCH --job-name=dqn_array_job
+#SBATCH --job-name=dqn_array_job_8cores
 #SBATCH --array=1-10
-#SBATCH --time=00:120:00
+#SBATCH --time=00:60:00
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=4G
 #SBATCH --output=out/dqn_job_%A_%a.txt
 #SBATCH --partition=CPUQ
