@@ -9,15 +9,30 @@ import numpy as np
 import torch
 import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
+from tensorboard.plugins.hparams import api as hp
 from torch.nn.functional import mse_loss
 from torch.utils.tensorboard import SummaryWriter
-
+import tensorflow as tf
 from src.DRL.qnetwork import QNetwork
 from src.DRL.wrapped_qrunner import wrapped_qrunner_env
 
 # Based on:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
 
+class WindowMetric:
+    def __init__(self, size):
+        self.size = size
+        self.window = []
+
+    def add(self, value):
+        if len(self.window) == self.size:
+            self.window.pop(0)
+        self.window.append(value)
+
+    def get_mean(self):
+        if not self.window:
+            return 0
+        return sum(self.window) / len(self.window)
 
 class LinearSchedule:
     def __init__(self, start, end, duration):
@@ -33,81 +48,64 @@ class LinearSchedule:
         value = self.start + (self.end - self.start) * (self.step_count / self.duration)
         self.step_count += 1
         return value
-
-def random_hyperparam_sample(hyperparam_ranges):
-    sample = {}
-    for param, values in hyperparam_ranges.items():
-        discrete = values[-1]
-        values = values[:-1]
-        if discrete:
-            sample[param] = random.choice(values)
-        elif len(values) == 2:
-            if all(isinstance(v, float) for v in values):
-                sample[param] = random.uniform(values[0], values[1])
-            else:
-                sample[param] = random.randint(values[0], values[1])
-    return sample
-
-# Ints -> Discrete sample
-# 2 Floats -> Uniform sample
-# Last bool: discrete (choice)
-hyperparam_ranges = {
-    "gamma": (0.9, 0.99, False),
-    "tau": (0.9, 1.0, False),
-    "learning_rate": (0.0001, 0.001, False),
-    "target_network_frequency": (500, 2000, False),
-    "batch_size": (16, 32, 64, 128, True),
-    "train_frequency": (2, 32, False),
-    "total_timesteps": (10_000_000, True),
-    "learning_starts": (10000, True),
-    "buffer_size": (50_000, True),
-    "start_eps": (1.0, True),
-    "end_eps": (0.01, 0.05, False),
-    "duration_eps": (10000, 100_000, False),
-    "frame_skip": (2, 4, False),
-    "frame_stack": (1, True),
-}
+    
+def sample_hyperparams(hyperparam_ranges):
+    hyperparams = {}
+    for hyperparam in hyperparam_ranges:
+        if isinstance(hyperparam.domain, hp.Discrete):
+            hyperparams[hyperparam.name] = random.choice(hyperparam.domain.values)
+        elif isinstance(hyperparam.domain, hp.RealInterval):
+            hyperparams[hyperparam.name] = round(random.uniform(hyperparam.domain.min_value, hyperparam.domain.max_value), 6)
+        elif isinstance(hyperparam.domain, hp.IntInterval):
+            hyperparams[hyperparam.name] = random.randint(hyperparam.domain.min_value, hyperparam.domain.max_value)
+            
+    return hyperparams
 
 if __name__ == "__main__":
-    task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0')
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Device:", device)
-
-    # seed = random.randint(0, 1000000) # Saved for reproducibility
-    seed = 0
+    window_size = 10
+    num_checkpoints = 5 # + step 0
+    log_checkpoints = True
+    record_video = False
+    human_render = False
+    
+    hyperparam_ranges = [
+        hp.HParam('gamma', hp.RealInterval(0.9, 0.99)),
+        hp.HParam('tau', hp.RealInterval(0.9, 1.0)),
+        hp.HParam('learning_rate', hp.RealInterval(0.0001, 0.001)),
+        hp.HParam('target_network_frequency', hp.IntInterval(500, 2000)),
+        hp.HParam('batch_size', hp.Discrete([16, 32, 64, 128])),
+        hp.HParam('train_frequency', hp.IntInterval(4, 16)),
+        hp.HParam('total_timesteps', hp.Discrete([100_000])),
+        hp.HParam('learning_starts', hp.Discrete([1000])),
+        hp.HParam('buffer_size', hp.Discrete([100_000])),
+        hp.HParam('start_eps', hp.Discrete([1.0])),
+        hp.HParam('end_eps', hp.RealInterval(0.01, 0.05)),
+        hp.HParam('duration_eps', hp.IntInterval(50_000, 500_000)),
+        hp.HParam('frame_skip', hp.Discrete([1, 2, 3, 4])),
+        hp.HParam('frame_stack', hp.Discrete([1, 2])),
+        hp.HParam('seed', hp.IntInterval(0, 1_000_000)),
+    ]
+    
+    episodic_return_window = WindowMetric(window_size)
+    
+    hyperparams = sample_hyperparams(hyperparam_ranges)
+    print(hyperparams)
+    seed = hyperparams['seed']
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-    
-    num_checkpoints = 10 # + step 0
-    log_checkpoints = True
-    record_video = False
-    human_render = False
-    
-    hyperparams = random_hyperparam_sample(hyperparam_ranges)
-    hyperparams = {
-    "gamma": 0.98,
-    "tau": 1.0,
-    "learning_rate": 0.0001,
-    "target_network_frequency": 1000,
-    "batch_size": 32,
-    "train_frequency": 4,
-    "total_timesteps": 10_000_000,
-    "learning_starts": 100,
-    "buffer_size": 200000,
-    "start_eps": 1,
-    "end_eps": 0.05,
-    "duration_eps": 100_000,
-    "frame_skip": 3,
-    "frame_stack": 1,
-    }
-    hyperparams['seed'] = seed
-    print(f"Using hyperparams:")
-    print(hyperparams)
 
+    task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0')
+    date = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_name = str(date)
+    model_path = f"runs/{run_name}_task_{task_id}"
+    writer = tf.summary.create_file_writer(model_path)
+    with writer.as_default():
+        hp.hparams(hyperparams)
+        
     if log_checkpoints:
         log_increment = math.log10(hyperparams['total_timesteps'])
         log_step_size = log_increment / num_checkpoints
@@ -116,20 +114,14 @@ if __name__ == "__main__":
         save_points = [int(hyperparams['total_timesteps'] / num_checkpoints) * i for i in range(num_checkpoints + 1)]
     print(f"Saving checkpoints: {save_points}")
 
-    ls = LinearSchedule(hyperparams['start_eps'], hyperparams['end_eps'], hyperparams['duration_eps'])
-
-    date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_name = str(date)
-    model_path = f"runs/{run_name}_task_{task_id}"
-
-    writer = SummaryWriter(model_path)
-    writer.add_text("hyperparameters", str(hyperparams))
-
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device:", device)
     q_network = QNetwork(frame_stacks=hyperparams['frame_stack']).to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=hyperparams['learning_rate'])
     target_network = QNetwork(frame_stacks=hyperparams['frame_stack']).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
+    ls = LinearSchedule(hyperparams['start_eps'], hyperparams['end_eps'], hyperparams['duration_eps'])
     env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'], frame_stack=hyperparams['frame_stack'], human_render=human_render, record_video=record_video)
     rb = ReplayBuffer(
         hyperparams['buffer_size'],
@@ -161,9 +153,10 @@ if __name__ == "__main__":
 
         # Record end of episode stats
         if "episode" in info:
-            writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-            writer.add_scalar("charts/epsilon", epsilon, global_step)
+            episodic_return_window.add(info["episode"]["r"][0])
+            with writer.as_default():
+                tf.summary.scalar('episodic_return', info["episode"]["r"][0], step=global_step)
+                tf.summary.scalar('episodic_length', info["episode"]["l"][0], step=global_step)
 
         # Handle truncated episodes
         real_next_obs = next_obs
@@ -209,13 +202,17 @@ if __name__ == "__main__":
 
             # Log non-episodic metrics
             if global_step % 1000 == 0 and loss is not None:
-                writer.add_scalar("charts/td_loss", loss, global_step)
-                writer.add_scalar("charts/q_values", action_q_values.mean(), global_step)
-                sps = int(global_step / (time.time() - start_time))
-                writer.add_scalar("charts/SPS", sps, global_step)
+                with writer.as_default():
+                    tf.summary.scalar('td_loss', loss.item(), step=global_step)
+                    tf.summary.scalar('epsilon', epsilon, step=global_step)
+                    tf.summary.scalar('q_values', action_q_values.mean().item(), step=global_step)
+                    tf.summary.scalar('steps_per_second', int(global_step / (time.time() - start_time)), step=global_step)
             
         # Possibly save model
         if global_step in save_points:
             torch.save(q_network.state_dict(), f"{model_path}/model_{global_step}.pt")
             print(f"Saved checkpoint: {global_step}")
     env.close()
+    
+    with writer.as_default():
+        tf.summary.scalar('final_episodic_return', episodic_return_window.get_mean(), step=global_step)
