@@ -105,6 +105,29 @@ class LimitEnv(gym.Wrapper):
         self._elapsed_steps = 0
         self._elapsed_steps_no_reward = 0
         return self.env.reset(**kwargs)
+    
+class FrameBlending(gym.Wrapper):
+    def __init__(self, env, alpha=0.8):
+        super().__init__(env)
+        self.env = env
+        self.alpha = alpha
+        self.previous_obs = None
+
+    def step(self, action):
+        observation, reward, terminated, truncated, info = self.env.step(action)
+        # Blend if previous observation exists, otherwise just use the current observation
+        if self.previous_obs is not None:
+            new_observation = self.alpha * observation + (1 - self.alpha) * self.previous_obs
+            new_observation = np.clip(new_observation, 0, 255).astype(np.uint8)
+        else:
+            new_observation = observation
+        self.previous_obs = observation.copy()
+        return new_observation, reward, terminated, truncated, info
+
+    def reset(self, **kwargs):
+        observation, info = self.env.reset(**kwargs)
+        self.previous_obs = observation.copy()
+        return observation, info
 
 class SkipEnv(gym.Wrapper):
     def __init__(self, env, skip):
@@ -307,11 +330,15 @@ def wrapped_qrunner_env(frame_skip=3, frame_stack=2, max_steps=5000, max_steps_n
     
     env = LimitEnv(env, max_steps=max_steps, max_steps_no_reward=max_steps_no_reward)
     
-    env = FrameStack(env, frame_stack)
+    if frame_stack > 1:
+        env = FrameStack(env, frame_stack)
+    elif frame_stack == 1:
+        env = FrameBlending(env)
     
     env = gym.wrappers.AutoResetWrapper(env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
-    env = TransformReward(env, lambda r: r-0.0001)
+    # TODO: need this?
+    #env = TransformReward(env, lambda r: r-0.0001)
     return env
 
 def convert_obs_to_image(obs):
@@ -331,7 +358,7 @@ def convert_obs_to_image(obs):
     return image
 
 def main():
-    env = wrapped_qrunner_env(frame_skip=3, frame_stack=4, human_render=True, record_video=False, scale=6)
+    env = wrapped_qrunner_env(frame_skip=3, frame_stack=1, human_render=False, record_video=False, scale=6)
     obs, _ = env.reset()
     num_frames = 50
     save_path = 'figures/observations/'
@@ -341,9 +368,7 @@ def main():
         obs, rewards, terminated, truncated, info = env.step(action)
         # Save the observation as an image
         if True:
-            obs = np.array(obs)
-            obs = convert_obs_to_image(obs).astype(np.uint8)
-            plt.imshow(obs)
+            plt.imshow(obs.astype(np.uint8))
             plt.title(f"Frame {i}")
             cbar = plt.colorbar(orientation='horizontal')
             plt.tight_layout()

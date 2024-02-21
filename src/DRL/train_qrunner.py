@@ -54,23 +54,23 @@ def random_hyperparam_sample(hyperparam_ranges):
 hyperparam_ranges = {
     "gamma": (0.9, 0.99, False),
     "tau": (0.9, 1.0, False),
-    "learning_rate": (0.00001, 0.001, False),
+    "learning_rate": (0.0001, 0.001, False),
     "target_network_frequency": (500, 2000, False),
     "batch_size": (16, 32, 64, 128, True),
     "train_frequency": (2, 32, False),
-    "total_timesteps": (100_000, True),
-    "learning_starts": (10000, 20000, False),
+    "total_timesteps": (10_000_000, True),
+    "learning_starts": (10000, True),
     "buffer_size": (50_000, True),
     "start_eps": (1.0, True),
     "end_eps": (0.01, 0.05, False),
     "duration_eps": (10000, 100_000, False),
-    "frame_skip": (2, 8, False),
-    "frame_stack": (2, True),
+    "frame_skip": (2, 4, False),
+    "frame_stack": (1, True),
 }
 
 if __name__ == "__main__":
     task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0')
-    device = torch.device("cuda" if torch.cuda.is_available() and False else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
 
     # seed = random.randint(0, 1000000) # Saved for reproducibility
@@ -83,11 +83,27 @@ if __name__ == "__main__":
         torch.cuda.manual_seed_all(seed)
     
     num_checkpoints = 10 # + step 0
-    log_checkpoints = False
+    log_checkpoints = True
     record_video = False
     human_render = False
     
     hyperparams = random_hyperparam_sample(hyperparam_ranges)
+    hyperparams = {
+    "gamma": 0.98,
+    "tau": 1.0,
+    "learning_rate": 0.0001,
+    "target_network_frequency": 1000,
+    "batch_size": 32,
+    "train_frequency": 4,
+    "total_timesteps": 10_000_000,
+    "learning_starts": 100,
+    "buffer_size": 200000,
+    "start_eps": 1,
+    "end_eps": 0.05,
+    "duration_eps": 100_000,
+    "frame_skip": 3,
+    "frame_stack": 1,
+    }
     hyperparams['seed'] = seed
     print(f"Using hyperparams:")
     print(hyperparams)
@@ -129,6 +145,7 @@ if __name__ == "__main__":
     obs, info = env.reset(seed=seed)
     start_time = time.time()
     
+    loss = None
     for global_step in range(hyperparams['total_timesteps'] + 1):
         # Determine and perform action
         epsilon = ls.step()
@@ -191,7 +208,7 @@ if __name__ == "__main__":
                     )
 
             # Log non-episodic metrics
-            if global_step % 1000 == 0:
+            if global_step % 1000 == 0 and loss is not None:
                 writer.add_scalar("charts/td_loss", loss, global_step)
                 writer.add_scalar("charts/q_values", action_q_values.mean(), global_step)
                 sps = int(global_step / (time.time() - start_time))
