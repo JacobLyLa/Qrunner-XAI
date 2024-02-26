@@ -1,8 +1,11 @@
+import datetime
+import os
 import random
 import time
 
 import cv2
 import gymnasium as gym
+import matplotlib.pyplot as plt
 import numpy as np
 import pygame
 from gymnasium import spaces
@@ -10,7 +13,6 @@ from gymnasium import spaces
 from src.Qrunner.event import Bullet, Coin, Lava, Portal, Shuriken, Star, Wall
 from src.Qrunner.player import Player
 
-import matplotlib.pyplot as plt
 
 class QrunnerEnv(gym.Env):
     metadata = {'render_modes': ['rgb_array'], 'render_fps': 60}
@@ -221,7 +223,7 @@ class QrunnerEnv(gym.Env):
 
     # Human mode, includes:
     # Button presses, Time delay, Scaled, Screen rendering, Freeze at game over
-    def run(self, scale=1):
+    def run(self, evaluate=-1, scale=1):
         screen_size = self.GAME_SIZE * scale
         game_over_font = pygame.font.Font('freesansbold.ttf', screen_size // 8)
         normal_font = pygame.font.Font('freesansbold.ttf', screen_size // 16)
@@ -229,41 +231,74 @@ class QrunnerEnv(gym.Env):
         display_surface = pygame.display.set_mode((screen_size, screen_size))
         clock = pygame.time.Clock()
         run = True
-        game_over = False
+        game_done = False
+        
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        file_path = f'eval_scores/{timestamp}.txt'
+        directory = os.path.dirname(file_path)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        games_played = 0
         while run:
             clock.tick(60)
-
-            # Check for exit
+            
+            # Check for exit or restart
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     run = False
+                    
+                if event.type == pygame.KEYUP:
+                    if event.key == pygame.K_r:
+                        if not self.game_over:
+                            games_played += 1
+                            
+                            # Save score to file if evaluate is a positive int
+                            if evaluate > 0:
+                                with open(file_path, 'a') as file:
+                                    file.write(f"{self.player.score:.2f}\n")
+                            
+                            # Check if the games played reached the evaluate number
+                            if evaluate > 0 and games_played >= evaluate:
+                                run = False
+                        
+                        game_done = False
+                        self.reset()
 
-            # Check for reset game            
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_r]:
-                game_over = False
-                self.reset()
-
-            # Freeze on game over, only render and print score once
+            # Game over logic with score saving
             if self.game_over:
-                if game_over:
+                if game_done:
                     continue
-                print(f"Score: {self.player.score:.2f}")
-                game_over = True
-                text = game_over_font.render(f'Game Over', True, (0, 0, 0))
-                textRect = text.get_rect()
-                textRect.center = (screen_size // 2, screen_size // 2)
-                display_surface.blit(text, textRect)
-                text = normal_font.render(f'Press R to restart', True, (0, 0, 0))
-                textRect = text.get_rect()
-                textRect.center = (screen_size // 2, screen_size // 2 + 0.1*screen_size)
-                display_surface.blit(text, textRect)
-                pygame.display.update()
+                print(f"Episode score: {self.player.score:.2f}")
+                game_done = True
+                games_played += 1
+                
+                # Save score to file if evaluate is a positive int
+                if evaluate > 0:
+                    with open(file_path, 'a') as file:
+                        file.write(f"{self.player.score:.2f}\n")
+                
+                # Check if the games played reached the evaluate number
+                if evaluate > 0 and games_played >= evaluate:
+                    run = False
+                
+                # Game over screen
+                if run:
+                    text = game_over_font.render(f'Game Over', True, (0, 0, 0))
+                    textRect = text.get_rect()
+                    textRect.center = (screen_size // 2, screen_size // 2)
+                    display_surface.blit(text, textRect)
+                    text = normal_font.render(f'Press R to restart', True, (0, 0, 0))
+                    textRect = text.get_rect()
+                    textRect.center = (screen_size // 2, screen_size // 2 + 0.1*screen_size)
+                    display_surface.blit(text, textRect)
+                    pygame.display.update()
                 continue
 
             # Act on key presses
             # Latter actions override former actions
             action = 0
+            keys = pygame.key.get_pressed()
             if keys[pygame.K_a]:
                 action = 1
             if keys[pygame.K_d]:
@@ -278,6 +313,10 @@ class QrunnerEnv(gym.Env):
             if scale != 1:
                 surface = pygame.transform.scale(surface, (screen_size, screen_size))
             display_surface.blit(surface, (0, 0))
+            text = normal_font.render(f'Score {self.player.score:.2f}', True, (0, 0, 0))
+            textRect = text.get_rect()
+            textRect.center = (screen_size // 2, 30)
+            display_surface.blit(text, textRect)
             pygame.display.update()
 
         pygame.quit()
@@ -285,4 +324,4 @@ class QrunnerEnv(gym.Env):
 if __name__ == "__main__":
     game = QrunnerEnv()
     game.reset()
-    game.run(8)
+    game.run(scale=8, evaluate=5)

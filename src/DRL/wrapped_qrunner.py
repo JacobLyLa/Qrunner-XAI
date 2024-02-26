@@ -10,6 +10,7 @@ import numpy as np
 import pygame
 from gymnasium.spaces import Box
 from gymnasium.wrappers import TransformReward
+from moviepy.editor import ImageSequenceClip
 from scipy.ndimage import gaussian_filter
 from stable_baselines3.common.env_checker import check_env
 from tqdm import tqdm
@@ -154,7 +155,8 @@ class HumanRendering(gym.Wrapper):
         self.screen_size = None
         self.window = None
         self.clock = None
-
+        self.frames = []
+        
     def step(self, *args, **kwargs):
         result = self.env.step(*args, **kwargs)
         self._render_frame()
@@ -163,6 +165,11 @@ class HumanRendering(gym.Wrapper):
     def reset(self, *args, **kwargs):
         result = self.env.reset(*args, **kwargs)
         self._render_frame()
+        if len(self.frames) > 1:
+            clip = ImageSequenceClip(self.frames, fps=60)
+            clip.write_videofile(f"videos/episode_{time.time()}.mp4")
+            clip.speedx(4).write_gif(f"videos/episode_{time.time()}.gif")
+            self.frames = []
         return result
 
     def render(self):
@@ -192,6 +199,10 @@ class HumanRendering(gym.Wrapper):
         pygame.event.pump()
         self.clock.tick(self.metadata["render_fps"])
         pygame.display.flip()
+        
+        array = pygame.surfarray.array3d(surf)
+        array = np.transpose(array, (1, 0, 2))
+        self.frames.append(array)
 
     def close(self):
         super().close()
@@ -283,47 +294,88 @@ class RenderWrapper(gym.Wrapper):
     
     # TODO: Choose between
     # 1. Red bad and green good, look at gradient sign
-    # 2. Look at gradient magnitude, blue -> red 
+    # 2. Look at gradient magnitude, blue -> red
     def overlay_salience_map(self, obs):
         if self.unwrapped.salience_map is None:
             return obs
         
+        gradients = self.unwrapped.salience_map
+        positive_gradients = gradients.clip(min=0).sum(axis=2)
+        negative_gradients = np.abs(gradients.clip(max=0).sum(axis=2))
+        
         height, width, _ = obs.shape
-        saliency_height, saliency_width = self.unwrapped.salience_map.shape
+        saliency_height, saliency_width = positive_gradients.shape
         # Rescale if necessary
         if (height, width) != (saliency_height, saliency_width):
-            salience_map = cv2.resize(self.unwrapped.salience_map, (width, height))
-        else:
-            salience_map = self.unwrapped.salience_map
+            positive_gradients = cv2.resize(positive_gradients, (width, height))
+            negative_gradients = cv2.resize(negative_gradients, (width, height))
         
-        salience_map = gaussian_filter(salience_map, sigma=8)
-        salience_map = salience_map / np.max(salience_map)
-        salience_map[salience_map < 0.3] = 0
+        positive_gradients = gaussian_filter(positive_gradients, sigma=6)
+        positive_gradients = positive_gradients * 20000
+        positive_gradients = positive_gradients.clip(0, 1)
+        positive_gradients[positive_gradients < 0.3] = 0
+        
+        negative_gradients = gaussian_filter(negative_gradients, sigma=6)
+        negative_gradients = negative_gradients * 20000
+        negative_gradients = negative_gradients.clip(0, 1)
+        negative_gradients[negative_gradients < 0.3] = 0
+
+        # Create a 3-channel color map for positive gradients in green
+        pos_map = np.zeros_like(obs)
+        pos_map[:, :, 2] = positive_gradients * 255  # Green channel
+
+        # Create a 3-channel color map for negative gradients in red
+        neg_map = np.zeros_like(obs)
+        neg_map[:, :, 0] = negative_gradients * 255  # Red channel
+
+        # Overlay the positive and negative maps on the original image with transparency
+        alpha = 0.4  # Transparency factor
+        obs_with_pos = cv2.addWeighted(obs, 1, pos_map.astype(np.uint8), alpha, 0)
+        final_obs = cv2.addWeighted(obs_with_pos, 1, neg_map.astype(np.uint8), alpha, 0)
+
+        return final_obs
+    '''
+    def overlay_salience_map(self, obs):
+        if self.unwrapped.salience_map is None:
+            return obs
+        
+        gradients = self.unwrapped.salience_map
+        
+        height, width, _ = obs.shape
+        saliency_height, saliency_width = gradients.shape
+        # Rescale if necessary
+        if (height, width) != (saliency_height, saliency_width):
+            salience_map = cv2.resize(gradients, (width, height))
+        else:
+            salience_map = gradients
+        
+        salience_map = gaussian_filter(salience_map, sigma=6)
+        # salience_map = salience_map / np.max(salience_map)
+        salience_map = salience_map * 20000
+        salience_map = salience_map.clip(0, 1)
+        salience_map[salience_map < 0.6] = 0
 
         # Convert obs from RGB to BGR
         obs = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
 
         # Apply the colormap to the salience map
         salience_map = cv2.applyColorMap(np.uint8(salience_map * 255), cv2.COLORMAP_JET)
-        obs = cv2.addWeighted(obs, 1, salience_map, 0.3, 0)
+        obs = cv2.addWeighted(obs, 1, salience_map, 0.2, 0)
 
         # back to RGB afterwards
         obs = cv2.cvtColor(obs, cv2.COLOR_BGR2RGB)
 
         return obs
+    '''
 
-def wrapped_qrunner_env(frame_skip=3, frame_stack=2, max_steps=5000, max_steps_no_reward=50, human_render=False, record_video=False, scale=8):
+
+def wrapped_qrunner_env(frame_skip=3, frame_stack=2, max_steps=5000, max_steps_no_reward=50, human_render=False, scale=8):
     env = QrunnerEnv()
-    if human_render or record_video:
+    if human_render:
         env = RenderWrapper(env, length=100)
         
     if human_render:
         env = HumanRendering(env, scale=scale)
-        
-    # TODO: Align with checkpoints from training and use scale
-    if record_video:
-        checkpoints = [0, 10, 100, 1000, 10000, 100000, 1000000]
-        env = gym.wrappers.RecordVideo(env=env, name_prefix='recording', video_folder=f"./videos", episode_trigger=lambda x: x in checkpoints)
     
     if frame_skip > 1:
         env = SkipEnv(env, skip=frame_skip)
@@ -358,7 +410,7 @@ def convert_obs_to_image(obs):
     return image
 
 def main():
-    env = wrapped_qrunner_env(frame_skip=3, frame_stack=1, human_render=False, record_video=False, scale=6)
+    env = wrapped_qrunner_env(frame_skip=3, frame_stack=1, human_render=False, scale=6)
     obs, _ = env.reset()
     num_frames = 50
     save_path = 'figures/observations/'

@@ -65,17 +65,15 @@ if __name__ == "__main__":
     window_size = 10
     num_checkpoints = 5 # + step 0
     log_checkpoints = True
-    record_video = False
-    human_render = False
     
     hyperparam_ranges = [
         hp.HParam('gamma', hp.RealInterval(0.9, 0.99)),
         hp.HParam('tau', hp.RealInterval(0.9, 1.0)),
         hp.HParam('learning_rate', hp.RealInterval(0.0001, 0.001)),
         hp.HParam('target_network_frequency', hp.IntInterval(500, 2000)),
-        hp.HParam('batch_size', hp.Discrete([16, 32, 64, 128])),
+        hp.HParam('batch_size', hp.Discrete([16, 32, 64])),
         hp.HParam('train_frequency', hp.IntInterval(4, 16)),
-        hp.HParam('total_timesteps', hp.Discrete([100_000])),
+        hp.HParam('total_timesteps', hp.Discrete([1_000_000])),
         hp.HParam('learning_starts', hp.Discrete([1000])),
         hp.HParam('buffer_size', hp.Discrete([100_000])),
         hp.HParam('start_eps', hp.Discrete([1.0])),
@@ -89,8 +87,25 @@ if __name__ == "__main__":
     episodic_return_window = WindowMetric(window_size)
     
     hyperparams = sample_hyperparams(hyperparam_ranges)
+    hyperparams = {
+        "gamma": 0.97,
+        "tau": 1.0,
+        "learning_rate": 0.0001,
+        "target_network_frequency": 1000,
+        "batch_size": 32,
+        "train_frequency": 4,
+        "total_timesteps": 10_000_000,
+        "learning_starts": 1000,
+        "buffer_size": 500000,
+        "start_eps": 1,
+        "end_eps": 0.05,
+        "duration_eps": 1_000_000,
+        "frame_skip": 4,
+        "frame_stack": 1,
+    }
     print(hyperparams)
-    seed = hyperparams['seed']
+    seed = 0
+    #seed = hyperparams['seed']
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -122,7 +137,7 @@ if __name__ == "__main__":
     target_network.load_state_dict(q_network.state_dict())
 
     ls = LinearSchedule(hyperparams['start_eps'], hyperparams['end_eps'], hyperparams['duration_eps'])
-    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'], frame_stack=hyperparams['frame_stack'], human_render=human_render, record_video=record_video)
+    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'], frame_stack=hyperparams['frame_stack'])
     rb = ReplayBuffer(
         hyperparams['buffer_size'],
         env.observation_space,
