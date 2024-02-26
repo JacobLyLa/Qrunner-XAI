@@ -66,10 +66,6 @@ concept_instances = [
 	concept_function=lambda state_variables:
 	state_variables['bad visible events']),
 
-	Concept(name="two close bullets", binary=True,
-	concept_function=lambda state_variables:
-	state_variables['two close bullets']),
-
 	Concept(name="bullet close", binary=False,
 	concept_function=lambda state_variables:
 	state_variables['bullet close']),
@@ -93,6 +89,14 @@ concept_instances = [
 	Concept(name="bullet below player", binary=True,
 	concept_function=lambda state_variables:
 	state_variables['bullet below player']),
+ 
+ 	Concept(name="reachable good coin", binary=True,
+	concept_function=lambda state_variables:
+	state_variables['reachable good coin']),
+  
+   	Concept(name="unreachable good coin", binary=True,
+	concept_function=lambda state_variables:
+	state_variables['unreachable good coin']),
 ]
 
 concept_instances = {concept.name: concept for concept in concept_instances}

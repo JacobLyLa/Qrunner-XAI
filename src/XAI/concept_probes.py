@@ -1,17 +1,9 @@
-import copy
-import warnings
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn import linear_model
-from sklearn.exceptions import ConvergenceWarning
-from sklearn.metrics import accuracy_score, r2_score
 from torch.utils.data import DataLoader, TensorDataset
-from torcheval.metrics.functional import r2_score as r2_score_torch
-
-warnings.filterwarnings('ignore', category=ConvergenceWarning)
+from torcheval.metrics.functional import r2_score
 
 def binary_score(preds, y):
     preds = preds > 0.5
@@ -20,7 +12,7 @@ def binary_score(preds, y):
     return 2*acc-1
 
 def validate_probe(preds, y, binary):
-    score = binary_score(preds, y) if binary else r2_score_torch(preds, y)
+    score = binary_score(preds, y) if binary else r2_score(preds, y)
     return score.cpu().item()
 
 def create_data(model, concept):
@@ -47,6 +39,7 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
     train_eval = []
     test_eval = []
     test_score = []
+    
     # Scale activations by dividing by the maximum abs activation value
     #train_max_act = torch.max(torch.abs(train_acts))
     #train_acts = train_acts / train_max_act
@@ -111,6 +104,7 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
         train_eval.append(total_train_loss/len(train_loader))
         test_eval.append(total_test_loss/len(test_loader))
         test_score.append(score)
+        
         # Early stopping
         if score > best_test_score:
             best_test_score = score

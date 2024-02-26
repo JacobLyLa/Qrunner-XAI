@@ -113,6 +113,18 @@ class StateExtractorWrapper(gym.Wrapper):
                     if event.x < self.state_variables['player x position'] and event.x + event.width > self.state_variables['player x position']:
                         self.state_variables['bullet below player'] = True
                         break
+                    
+        # Unreachable and Reachable good coin
+        self.state_variables['reachable good coin'] = False
+        self.state_variables['unreachable good coin'] = False
+        for event in visible_events:
+            if type(event).__name__ == 'Coin' and event.good:
+                if event.y > 30:
+                    self.state_variables['reachable good coin'] = True
+                    break
+                else:
+                    self.state_variables['unreachable good coin'] = True
+                    break
                         
         self.state_variables['episode steps'] += 1
         self.total_steps += 1
