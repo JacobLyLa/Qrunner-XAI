@@ -1,3 +1,5 @@
+# TODO: move to a notebook as it is not core? (not being imported by other files)
+
 import random
 import time
 
@@ -33,7 +35,7 @@ def main():
         
     print("Testing FPS for wrapped env")
     for scale in scales:
-        env = wrapped_qrunner_env(frame_skip=1, frame_stack=4, scale=scale)
+        env = wrapped_qrunner_env(frame_skip=1, scale=scale)
         fps = test_fps(env, frames)
         results['Wrapped Env'][scale] = fps
         

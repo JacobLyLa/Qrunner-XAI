@@ -9,14 +9,13 @@ import numpy as np
 import torch
 import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
-from tensorboard.plugins.hparams import api as hp
 from torch.nn.functional import mse_loss
 from torch.utils.tensorboard import SummaryWriter
-import tensorflow as tf
+
 from src.DRL.qnetwork import QNetwork
 from src.DRL.wrapped_qrunner import wrapped_qrunner_env
 
-# Based on:
+# DQN algorithm inspired by:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
 
 class WindowMetric:
@@ -49,46 +48,24 @@ class LinearSchedule:
         self.step_count += 1
         return value
     
-def sample_hyperparams(hyperparam_ranges):
-    hyperparams = {}
-    for hyperparam in hyperparam_ranges:
-        if isinstance(hyperparam.domain, hp.Discrete):
-            hyperparams[hyperparam.name] = random.choice(hyperparam.domain.values)
-        elif isinstance(hyperparam.domain, hp.RealInterval):
-            hyperparams[hyperparam.name] = round(random.uniform(hyperparam.domain.min_value, hyperparam.domain.max_value), 6)
-        elif isinstance(hyperparam.domain, hp.IntInterval):
-            hyperparams[hyperparam.name] = random.randint(hyperparam.domain.min_value, hyperparam.domain.max_value)
-            
-    return hyperparams
+def realInterval(low, high):
+    def _sample():
+        return round(random.uniform(low, high), 6)
+    return _sample
 
-if __name__ == "__main__":
-    window_size = 10
-    num_checkpoints = 5 # + step 0
-    log_checkpoints = True
-    
-    hyperparam_ranges = [
-        hp.HParam('gamma', hp.RealInterval(0.9, 0.99)),
-        hp.HParam('tau', hp.RealInterval(0.9, 1.0)),
-        hp.HParam('learning_rate', hp.RealInterval(0.0001, 0.001)),
-        hp.HParam('target_network_frequency', hp.IntInterval(500, 2000)),
-        hp.HParam('batch_size', hp.Discrete([16, 32, 64])),
-        hp.HParam('train_frequency', hp.IntInterval(4, 16)),
-        hp.HParam('total_timesteps', hp.Discrete([1_000_000])),
-        hp.HParam('learning_starts', hp.Discrete([1000])),
-        hp.HParam('buffer_size', hp.Discrete([100_000])),
-        hp.HParam('start_eps', hp.Discrete([1.0])),
-        hp.HParam('end_eps', hp.RealInterval(0.01, 0.05)),
-        hp.HParam('duration_eps', hp.IntInterval(50_000, 500_000)),
-        hp.HParam('frame_skip', hp.Discrete([1, 2, 3, 4])),
-        hp.HParam('frame_stack', hp.Discrete([1, 2])),
-        hp.HParam('seed', hp.IntInterval(0, 1_000_000)),
-    ]
-    
-    episodic_return_window = WindowMetric(window_size)
-    
-    hyperparams = sample_hyperparams(hyperparam_ranges)
-    hyperparams = {
-        "gamma": 0.97,
+def intInterval(low, high):
+    def _sample():
+        return random.randint(low, high)
+    return _sample
+
+def discrete(values):
+    def _sample():
+        return random.choice(values)
+    return _sample
+
+def get_default_hyperparams():
+    return {
+        "gamma": 0.98,
         "tau": 1.0,
         "learning_rate": 0.0001,
         "target_network_frequency": 1000,
@@ -101,43 +78,71 @@ if __name__ == "__main__":
         "end_eps": 0.05,
         "duration_eps": 1_000_000,
         "frame_skip": 4,
-        "frame_stack": 1,
     }
-    print(hyperparams)
+        
+
+if __name__ == "__main__":
+    log_interval = 1000
+    window_size = 10
     seed = 0
-    #seed = hyperparams['seed']
+    num_checkpoints = 20 # + step 0
+    default_hyperparams = True
+    
+    # Set seeds
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+    
+    hyperparam_samplers = {
+        'gamma': realInterval(0.9, 0.99),
+        'tau': realInterval(0.9, 1.0),
+        'learning_rate': realInterval(0.0001, 0.001),
+        'target_network_frequency': intInterval(500, 2000),
+        'batch_size': discrete([16, 32, 64]),
+        'train_frequency': intInterval(4, 16),
+        'total_timesteps': discrete([1_000_000]),
+        'learning_starts': discrete([1000]),
+        'buffer_size': discrete([100_000]),
+        'start_eps': discrete([1.0]),
+        'end_eps': realInterval(0.01, 0.05),
+        'duration_eps': intInterval(50_000, 500_000),
+        'frame_skip': discrete([1, 2, 3, 4]),
+    }
+    if default_hyperparams:
+        hyperparams = get_default_hyperparams()
+    else:
+        hyperparams = {k: v() for k, v in hyperparam_samplers.items()}
+    print(f"Hyperparameters: {hyperparams}")
+    
 
+    episodic_return_window = WindowMetric(window_size)
+    episodic_length_window = WindowMetric(window_size)
+    td_loss_window = WindowMetric(window_size)
+    q_values_window = WindowMetric(window_size)
+    sps_window = WindowMetric(window_size)
+    
     task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0')
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_name = str(date)
     model_path = f"runs/{run_name}_task_{task_id}"
-    writer = tf.summary.create_file_writer(model_path)
-    with writer.as_default():
-        hp.hparams(hyperparams)
-        
-    if log_checkpoints:
-        log_increment = math.log10(hyperparams['total_timesteps'])
-        log_step_size = log_increment / num_checkpoints
-        save_points = [0] + [int(10 ** (log_step_size * i)) for i in range(1, num_checkpoints + 1)]
-    else:
-        save_points = [int(hyperparams['total_timesteps'] / num_checkpoints) * i for i in range(num_checkpoints + 1)]
-    print(f"Saving checkpoints: {save_points}")
+    writer = SummaryWriter(model_path)
+    writer.add_text("hyperparameters", str(hyperparams))
+    
+    save_points = [int(hyperparams['total_timesteps'] / num_checkpoints) * i for i in range(num_checkpoints + 1)]
+    print(f"Saving at checkpoints: {save_points}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
-    q_network = QNetwork(frame_stacks=hyperparams['frame_stack']).to(device)
+    q_network = QNetwork().to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=hyperparams['learning_rate'])
-    target_network = QNetwork(frame_stacks=hyperparams['frame_stack']).to(device)
+    target_network = QNetwork().to(device)
     target_network.load_state_dict(q_network.state_dict())
 
     ls = LinearSchedule(hyperparams['start_eps'], hyperparams['end_eps'], hyperparams['duration_eps'])
-    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'], frame_stack=hyperparams['frame_stack'])
+    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'])
     rb = ReplayBuffer(
         hyperparams['buffer_size'],
         env.observation_space,
@@ -147,11 +152,10 @@ if __name__ == "__main__":
         optimize_memory_usage=True,
         handle_timeout_termination=False, # Can't use with optimize_memory_usage
     )
-    print((rb.observations.nbytes + rb.actions.nbytes + rb.rewards.nbytes + rb.dones.nbytes) / 1e9, "GB", flush=True)
+    print(f"Replaybuffer allocates {(rb.observations.nbytes + rb.actions.nbytes + rb.rewards.nbytes + rb.dones.nbytes) / 1e9}GB", flush=True)
     
     obs, info = env.reset(seed=seed)
     start_time = time.time()
-    
     loss = None
     for global_step in range(hyperparams['total_timesteps'] + 1):
         # Determine and perform action
@@ -159,19 +163,18 @@ if __name__ == "__main__":
         if random.random() < epsilon:
             action = env.action_space.sample()
         else:
-            np_obs = np.array(obs)
-            tensor_obs = torch.Tensor(np_obs).to(device)
+            tensor_obs = torch.Tensor(obs).to(device)
             reshaped_obs = tensor_obs.unsqueeze(0)
             q_values = q_network(reshaped_obs)
             action = q_values.argmax(dim=1).item()
         next_obs, reward, terminated, truncated, info = env.step(action)
 
-        # Record end of episode stats
+        # Log episodic metrics
         if "episode" in info:
             episodic_return_window.add(info["episode"]["r"][0])
-            with writer.as_default():
-                tf.summary.scalar('episodic_return', info["episode"]["r"][0], step=global_step)
-                tf.summary.scalar('episodic_length', info["episode"]["l"][0], step=global_step)
+            episodic_length_window.add(info["episode"]["l"])
+            writer.add_scalar('episodic_return', episodic_return_window.get_mean(), global_step)
+            writer.add_scalar('episodic_length', episodic_length_window.get_mean(), global_step)
 
         # Handle truncated episodes
         real_next_obs = next_obs
@@ -216,18 +219,17 @@ if __name__ == "__main__":
                     )
 
             # Log non-episodic metrics
-            if global_step % 1000 == 0 and loss is not None:
-                with writer.as_default():
-                    tf.summary.scalar('td_loss', loss.item(), step=global_step)
-                    tf.summary.scalar('epsilon', epsilon, step=global_step)
-                    tf.summary.scalar('q_values', action_q_values.mean().item(), step=global_step)
-                    tf.summary.scalar('steps_per_second', int(global_step / (time.time() - start_time)), step=global_step)
+            if global_step % log_interval == 0 and loss is not None:
+                td_loss_window.add(loss.item())
+                q_values_window.add(action_q_values.mean().item())
+                writer.add_scalar('td_loss', td_loss_window.get_mean(), global_step)
+                writer.add_scalar('q_values', q_values_window.get_mean(), global_step)
+                
+                writer.add_scalar('epsilon', epsilon, global_step)
+                writer.add_scalar('steps_per_second', int(global_step / (time.time() - start_time)), global_step)
             
         # Possibly save model
         if global_step in save_points:
             torch.save(q_network.state_dict(), f"{model_path}/model_{global_step}.pt")
             print(f"Saved checkpoint: {global_step}")
     env.close()
-    
-    with writer.as_default():
-        tf.summary.scalar('final_episodic_return', episodic_return_window.get_mean(), step=global_step)

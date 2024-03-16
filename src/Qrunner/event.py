@@ -4,14 +4,6 @@ from abc import ABC, abstractmethod
 
 import pygame
 
-'''
-TODO:
-- events ideas:
-- 1 event is a key, another event is a chest, chest only opens if you have the key
-- 3 consequetive coins: 1, 2, 3. only take in that order for reward, wrong order and they dissapear
-- 
-'''
-
 # TODO:
 # if event is outside of screen skip drawing it
 
@@ -44,7 +36,6 @@ class Event(ABC):
         overlap_y = min(self.y + self.height, event.y + event.height) - max(self.y, event.y)
         if overlap_y < 0: overlap_y = 0  # No overlap in y-axis
 
-        # Calculate area of overlap
         overlap_area = overlap_x * overlap_y
 
         # Calculate areas of the two events
@@ -53,10 +44,7 @@ class Event(ABC):
 
         # Use the smaller of the two areas for the ratio
         smaller_area = min(self_area, event_area)
-        if smaller_area == 0:
-            return 0  # Avoid division by zero
 
-        # Calculate and return the overlap ratio
         return overlap_area / smaller_area
 
     @abstractmethod
@@ -88,22 +76,21 @@ class Coin(Event):
             )[0]
 
         if coin_type == 'gold':
-            self.good = True
             self.color = Coin.GOLD
             self.value = 1
             self.radius = 0.03 * s
             
         elif coin_type == 'blue':
-            self.good = True
             self.color = Coin.BLUE
             self.value = 0.2
             self.radius = 0.03 * s
             
         elif coin_type == 'red':
-            self.good = False
             self.color = Coin.RED
             self.value = -0.2
             self.radius = 0.03 * s
+            
+        self.coin_type = coin_type
 
         self.width = self.radius * 2
         self.height = self.radius * 2
@@ -114,10 +101,20 @@ class Coin(Event):
             self.x = self.game.player.x + s + random.randint(0, s // 2)
             self.y = random.randint(s//2, s - self.game.ground_height - s // 10)
             
-        # check if coin overlaps too much with wall
+        # If it's a red coin that we can't walk under or jump over, make it close to ground
+        if self.coin_type == 'red':
+            player_head_y = self.game.GAME_SIZE - self.game.ground_height - self.game.player_height
+            # If it can't be walked under
+            if player_head_y < self.y + self.height:
+                # If it can't be jumped over
+                if player_head_y + self.game.player_height//2 > self.y + self.height:
+                    self.y = (self.game.GAME_SIZE - self.game.ground_height) + self.game.player_height // 2
+            
+        # Check if coin overlaps with wall
         for event in self.game.active_events:
-            if isinstance(event, Wall) and event.overlap_ratio(self) > 0.0:
+            if isinstance(event, Wall) and event.overlap_ratio(self) > 0:
                 self.fail = True
+                return
 
     def frame_update_remove(self):
         if self.overlap(self.game.player):
@@ -146,23 +143,25 @@ class Wall(Event):
             self.height = random.randint(int(0.1*s), int(0.25*s))
             self.x = self.game.player.x + s + random.randint(0, s // 2)
             self.y = s - self.game.ground_height - self.height
-            # check if wall is covered by another wall
+            # Check if wall is covered by another event
             for event in self.game.active_events:
-                if isinstance(event, Wall) and event.overlap_ratio(self) > 0.5:
+                if event.overlap_ratio(self) > 0.3:
                     self.fail = True
                     return
+            self.wall_type = 'ground'
         # Air wall
         else:
             self.width = random.randint(int(0.2*s), int(0.4*s))
             self.height = random.randint(int(0.03*s), int(0.04*s))
             self.x = self.game.player.x + s + random.randint(0, s // 2)
             self.y = random.randint(int(0.3*s), int(0.5*s))
-            # check if wall is covered by another wall
+            # Check if wall is covered by another event
             for event in self.game.active_events:
-                if isinstance(event, Wall) and event.overlap_ratio(self) > 0.1:
+                if isinstance(event, Wall) and event.overlap_ratio(self) > 0.0:
                     self.fail = True
                     return
-            # Also generate a coin on top of it
+            self.wall_type = 'air'
+            # Also generate a blue coin on top of it
             coin = Coin(self.game, self.x + self.width // 2, self.y, 'blue')
             self.game.active_events.append(coin)
 
@@ -199,14 +198,15 @@ class Wall(Event):
             player.jumping = False
         # If the player moved right into the wall
         if moved_right and player.x + player.width > self.x and player.x_prev + player.width <= self.x:
-            # if "stairs" then dont collide. stairs are when bottom of player and top of wall have small difference
+            # "Stairs" are when bottom of player and top of wall have small difference
+            # If "Stairs" then dont collide. 
             if player.y + player.height < self.y + 0.05 * s:
                 player.y = self.y - player.height
             else:
                 player.x = self.x - player.width - 0.001
         # If the player moved left into the wall
         if moved_left and player.x < self.x + self.width and player.x_prev >= self.x + self.width:
-            # check stairs
+            # Check stairs
             if player.y + player.height < self.y + 0.05 * s:
                 player.y = self.y - player.height
             else:
@@ -285,13 +285,13 @@ class Lava(Event):
             self.width = random.randint(int(0.05*s), int(0.12*s))
             self.x = self.game.player.x + s + random.randint(0, s // 2)
         
-        # check if lava overlaps with other lava
+        # Check if lava overlaps with other lava
         for event in self.game.active_events:
             if isinstance(event, Lava) and event.overlap_ratio(self) > 0.1:
                 self.fail = True
                 return
             
-        # x% chance for extra lava to the right
+        # Chance for extra lava to the right
         if random.random() < 0.2:
             lava = Lava(self.game, self.x + self.width + self.game.player.width * 2, self.width)
             self.game.active_events.append(lava)
@@ -491,7 +491,7 @@ class Portal(Event): # Probably make imune for 50 frames something
         return False
 
     def draw(self, window, offset):
-        # Draw entry portal
+        # Entry portal
         pygame.draw.rect(window, self.ENTRY_COLOR, (self.x - offset, self.y, self.WIDTH, self.HEIGHT))
-        # Draw exit portal
+        # Exit portal
         pygame.draw.rect(window, self.EXIT_COLOR, (self.exit_x - offset, self.exit_y, self.WIDTH, self.HEIGHT))

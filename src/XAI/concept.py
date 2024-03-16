@@ -22,7 +22,6 @@ class Concept:
         print('binary:', self.binary)
         print('train:', self.train_obs.shape, self.train_values.shape)
         print('test:', self.test_obs.shape, self.test_values.shape)
-
         
     def save_torch_probe(self, probe, model_name, layer, score):
         # Remove .pt files in folder
@@ -52,7 +51,7 @@ class Concept:
             else:
                 absence.append(game_step)
             min_length = min(len(presence), len(absence))
-            # enough samples for both classes
+            # Enough samples for both classes
             if min_length * 2 >= train_size + test_size:
                 sufficent_samples = True
                 break
@@ -89,10 +88,7 @@ class Concept:
         values = []
         for i in range(train_size + test_size):
             values.append(self.concept_function(env_steps[i].state_variables))
-
         values = np.array(values)
-        # Scale by std to use similar regularization for all concepts
-        #values = values / np.std(values)
 
         # Train test split
         env_steps = env_steps[:train_size + test_size]

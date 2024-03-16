@@ -9,13 +9,12 @@ import torch.nn as nn
 # Architecture inspired from:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
 class QNetwork(nn.Module):
-    def __init__(self, frame_stacks, colors=3, actions=5, model_path=None):
+    def __init__(self, colors=3, actions=5, model_path=None):
         super().__init__()
-        self.frame_stacks = frame_stacks
         self.colors = colors
 
         self.network = nn.Sequential(
-            nn.Conv2d(frame_stacks * colors, 32, 8, stride=4),
+            nn.Conv2d(colors, 32, 8, stride=4),
             nn.ReLU(),
             nn.Conv2d(32, 64, 4, stride=2),
             nn.ReLU(),
@@ -33,6 +32,7 @@ class QNetwork(nn.Module):
             run_id = parts[1]
             model_part = parts[2].split("_")[1].split(".")[0]
             self.model_name = f"{run_id}-{model_part}"
+            print(f"Loaded model: {self.model_name}")
 
     def forward(self, x, return_acts=False):
         # Note return_acts detachs the activations from the graph, can't directly backprop through them
@@ -75,8 +75,8 @@ class QNetwork(nn.Module):
 
 if __name__ == '__main__':
     batch_size = 32
-    batch = torch.rand((batch_size, 84, 84, 12))
-    model = QNetwork(frame_stacks=4)
+    batch = torch.rand((batch_size, 84, 84, 3))
+    model = QNetwork()
     print(model)
     print(f"Number of parameters in the model: {model.count_parameters()}")
     output = model(batch)

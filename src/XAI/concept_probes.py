@@ -40,12 +40,6 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
     test_eval = []
     test_score = []
     
-    # Scale activations by dividing by the maximum abs activation value
-    #train_max_act = torch.max(torch.abs(train_acts))
-    #train_acts = train_acts / train_max_act
-    #test_acts = test_acts / train_max_act
-    #print(f'Train max activation: {train_max_act}')
-    
     # Create data loaders
     train_dataset = TensorDataset(train_acts.to(device), train_values.to(device))
     test_dataset = TensorDataset(test_acts.to(device), test_values.to(device))
@@ -62,7 +56,7 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
     optimizer = optim.Adam(probe.parameters(), lr=hyperparams['lr'])
     loss_fn = nn.MSELoss()
     
-    # Initialize variables for early stopping
+    # Variables for early stopping
     best_test_score = -float('inf')
     epochs_without_improvement = 0
 
@@ -74,7 +68,7 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
             outputs = probe(batch_obs)
             loss = loss_fn(outputs.squeeze(1), batch_values)
             
-            # Compute the L1 penalty
+            # L1 penalty
             l1_penalty = sum(p.abs().sum() for p in probe.parameters())
             total_loss = loss + hyperparams['lambda_l1'] * l1_penalty
             
@@ -96,8 +90,6 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
                 total_test_loss += loss.item()
                 
                 eval_score = validate_probe(outputs.squeeze(1), batch_values, binary)
-                if eval_score > 1 or np.isnan(eval_score):
-                    assert False, f'Invalid score: {eval_score}'
                 scores.append(eval_score)
         score = np.mean(scores)
 
@@ -133,6 +125,7 @@ def train_probes(model, concept, hyperparams, layers):
             best_hyperparam = None
             best_info = None
             best_score = -float('inf')
+            # Find best hyperparams
             for hyperparam_instance in hyperparams:
                 probe, info = _train_probe(concept.binary, hyperparam_instance, train_acts, test_acts, train_values, test_values)
                 if info['test_score'][-1] > best_score:

@@ -1,4 +1,5 @@
 import time
+from itertools import product
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -32,41 +33,37 @@ def save_plot(concept, info):
     plt.tight_layout()
     plt.savefig(f'{concept.folder_path}probe_training.png')
     
-def get_hyperparams_list(lr, batch_size, lambda_l1, patience, epochs):
-    hyperparams = []
-    for lr_ in lr:
-        for batch_size_ in batch_size:
-            for lambda_l1_ in lambda_l1:
-                hyperparams.append({
-                    'lr': lr_,
-                    'lambda_l1': lambda_l1_,
-                    'patience': patience,
-                    'epochs': epochs,
-                    'batch_size': batch_size_,
-                })
-    return hyperparams
+def get_hyperparams_combinations(hyperparams_dict):
+    keys, value_tuples = zip(*hyperparams_dict.items())
+    all_combinations = product(*value_tuples)
+    
+    # Create a list of dictionaries, each representing a unique combination of hyperparameters
+    hyperparams_combinations = [
+        dict(zip(keys, combination)) for combination in all_combinations
+    ]
+    return hyperparams_combinations
+
 
 if __name__ == '__main__':
     max_size = 20000
     layer = 4
-    frame_stacks = 1
     
-    patience = 10
-    epochs = 200
-    lr = (0.1, 0.01, 0.001)
-    batch_size = (256, 512)
-    lambdas = (0.0, 0.001)
+    # Use (x, ) for single values
+    hyperparam_ranges = {
+        'lr': (0.001,),
+        'batch_size': (256,),
+        'lambda_l1': (0.0, 0.01),
+        'patience': (10,),
+        'epochs': (100,)
+    }
+    hyperparams = get_hyperparams_combinations(hyperparam_ranges)
+    print(f'Number of hyperparameters configs: {len(hyperparams)}')
 
     model_path = QNetwork.find_newest_model()
-    model = QNetwork(frame_stacks=frame_stacks, model_path=model_path)
-    print(f"Using model: {model_path}")
-    
-    hyperparams = get_hyperparams_list(lr, batch_size, lambda_l1=lambdas, patience=patience, epochs=epochs)
-    print(f'Number of hyperparameters configs: {len(hyperparams)}')
+    model = QNetwork(model_path=model_path)
     
     env_steps = Concept.load_concept_data()
     for concept in concept_instances.values():
-        name = concept.name
         start_time = time.time()
         concept.prepare_data(env_steps, max_size=max_size)
         concept.summary()
@@ -75,6 +72,6 @@ if __name__ == '__main__':
             continue
         
         layer_probes, layer_info, best_hyperparams = train_probes(model, concept, hyperparams, [layer])
-        print(f'Layer {layer} | Test score: {layer_info[layer]["test_score"][-1]:.3f} | Best hyperparams: {best_hyperparams} | Time: {time.time() - start_time:.2f}s')
-        save_plot(concept, layer_info[layer])
         concept.save_torch_probe(layer_probes[layer], model.model_name, layer, layer_info[layer]['test_score'][-1])
+        save_plot(concept, layer_info[layer])
+        print(f'Layer {layer} | Test score: {layer_info[layer]["test_score"][-1]:.3f} | Best hyperparams: {best_hyperparams} | Time: {time.time() - start_time:.2f}s\n')

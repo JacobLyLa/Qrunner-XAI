@@ -34,7 +34,7 @@ def train_model(use_dqn, env, its, restart=True):
     return model
 
 def main():
-    env = wrapped_qrunner_env(frame_skip=3, frame_stack=2)
+    env = wrapped_qrunner_env(frame_skip=4)
     obs, info = env.reset()
     print(f"Observation shape: {obs.shape}")
     
@@ -42,7 +42,7 @@ def main():
     #model = DQN.load("runs/sb3/dqn_qrunner")
 
     # Test the trained agent
-    env = wrapped_qrunner_env(frame_skip=3, frame_stack=2, human_render=True, scale=6)
+    env = wrapped_qrunner_env(frame_skip=4, human_render=True, scale=6)
     model.set_env(env)
     obs, info = env.reset()
     last_time = time.time()

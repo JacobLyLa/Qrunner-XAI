@@ -1,5 +1,6 @@
 import pygame
 
+# Keep track of the player states, also used for rendering the player
 class Player:
     BLUE = (0, 0, 255)
     ORANGE = (255, 165, 0)
@@ -22,7 +23,7 @@ class Player:
         self.standing_on = None
         self.star = None
         
-        # TODO: Only when rendering to human
+        # Change manually if wanted when debugging
         self.draw_coords = False
         self.draw_score = False
         self.draw_star = False

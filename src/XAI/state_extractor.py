@@ -8,6 +8,10 @@ import numpy as np
 def euclidean_distance(x1, y1, x2, y2):
     return np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
+def x_overlap(obj1_x, obj1_width, obj2_x, obj2_width):
+    return (obj1_x <= obj2_x and 
+            obj1_x + obj1_width >= obj2_x + obj2_width)
+
 class EnvStep:
     def __init__(self, observation, image, state_variables):
         self.observation = np.array(observation).copy()
@@ -32,14 +36,12 @@ class StateExtractorWrapper(gym.Wrapper):
         self.state_variables['player falling'] = self.env.unwrapped.player.gravity_count > 0
         self.state_variables['player dodging'] = self.env.unwrapped.player.dodging
         self.state_variables['player fall velocity'] = self.env.unwrapped.player.gravity_count
-        self.state_variables['player standing on wall'] = self.env.unwrapped.player.standing_on != None
+        self.state_variables['player on wall'] = self.env.unwrapped.player.standing_on != None
         self.state_variables['player x position'] = self.env.unwrapped.player.x
         if not self.state_variables['player dodging']:
             self.state_variables['player y position'] = self.env.unwrapped.player.y
         else:
             self.state_variables['player y position'] = self.env.unwrapped.player.y - self.env.unwrapped.player.height
-        
-        self.state_variables['camera x offset'] = self.env.unwrapped.camera_offset_x
 
         # Can't save lists in state variables, so we create all necessary extractions from the list here
         events = self.env.unwrapped.active_events
@@ -49,28 +51,16 @@ class StateExtractorWrapper(gym.Wrapper):
         # Events within the camera view
         visible_events = [e for e in events if e.x - camera_offset < size and e.x + e.width - camera_offset > 0]
         self.state_variables['visible events'] = len(visible_events)
-        # Number of walls
         self.state_variables['visible walls'] = len([e for e in visible_events if type(e).__name__ == 'Wall'])
-        # Number of bullets
+        self.state_variables['visible air walls'] = len([e for e in visible_events if type(e).__name__ == 'Wall' and e.wall_type == 'air'])
         self.state_variables['visible bullets'] = len([e for e in visible_events if type(e).__name__ == 'Bullet'])
-        # Number of lava
         self.state_variables['visible lava'] = len([e for e in visible_events if type(e).__name__ == 'Lava'])
-        # Number of coins
-        self.state_variables['visible coins'] = len([e for e in visible_events if type(e).__name__ == 'Coin'])
-        # Number of good events (coins)
-        self.state_variables['good visible events'] = len([e for e in visible_events if hasattr(e, 'good') and e.good])
-        # Number of bad events (lava, bullets, red coins)
-        self.state_variables['bad visible events'] = len([e for e in visible_events if hasattr(e, 'good') and not e.good]) + self.state_variables['visible lava'] + self.state_variables['visible bullets']
-        # Two close bullets
-        distance_threshold = 20
-        self.state_variables['two close bullets'] = False
-        for i in range(len(visible_events)):
-            for j in range(i + 1, len(visible_events)):
-                if type(visible_events[i]).__name__ == 'Bullet' and type(visible_events[j]).__name__ == 'Bullet':
-                    if euclidean_distance(visible_events[i].x, visible_events[i].y, visible_events[j].x, visible_events[j].y) < distance_threshold:
-                        self.state_variables['two close bullets'] = True
-                        break
-        
+        self.state_variables['visible blue coins'] = len([e for e in visible_events if type(e).__name__ == 'Coin' and e.coin_type == 'blue'])
+        self.state_variables['visible gold coins'] = len([e for e in visible_events if type(e).__name__ == 'Coin' and e.coin_type == 'gold'])
+        self.state_variables['visible red coins'] = len([e for e in visible_events if type(e).__name__ == 'Coin' and e.coin_type == 'red'])
+        self.state_variables['visible good events'] = self.state_variables['visible blue coins'] + self.state_variables['visible gold coins']
+        self.state_variables['visible bad events'] = self.state_variables['visible red coins'] + self.state_variables['visible lava'] + self.state_variables['visible bullets']
+
         # Bullet close
         self.state_variables['bullet close'] = 0
         for event in visible_events:
@@ -89,19 +79,21 @@ class StateExtractorWrapper(gym.Wrapper):
                     break
                 
         # Coin above lava
-        self.state_variables['coin above lava'] = False
+        self.state_variables['bad coin above lava'] = False
         for event in visible_events:
-            if type(event).__name__ == 'Coin':
+            if type(event).__name__ == 'Coin' and event.coin_type == 'red':
                 for e in visible_events:
-                    if type(e).__name__ == 'Lava' and e.x < event.x and e.x + e.width > event.x:
-                        self.state_variables['coin above lava'] = True
+                    if type(e).__name__ == 'Lava' and x_overlap(event.x, event.width, e.x, e.width):
+                        self.state_variables['bad coin above lava'] = True
                         break
+                if self.state_variables['bad coin above lava']:
+                    break
                     
         # Lava below player
         self.state_variables['lava below player'] = False
         for event in visible_events:
             if type(event).__name__ == 'Lava':
-                if event.x < self.state_variables['player x position'] and event.x + event.width > self.state_variables['player x position']:
+                if x_overlap(self.state_variables['player x position'], self.env.unwrapped.player.width, event.x, event.width):
                     self.state_variables['lava below player'] = True
                     break
                 
@@ -109,29 +101,58 @@ class StateExtractorWrapper(gym.Wrapper):
         self.state_variables['bullet below player'] = False
         for event in visible_events:
             if type(event).__name__ == 'Bullet':
-                if self.env.unwrapped.player.y + self.env.unwrapped.player.height < event.y + event.height:
-                    if event.x < self.state_variables['player x position'] and event.x + event.width > self.state_variables['player x position']:
+                if x_overlap(self.state_variables['player x position'], self.env.unwrapped.player.width, event.x, event.width):
+                    if event.y > self.state_variables['player y position']:
                         self.state_variables['bullet below player'] = True
                         break
+        
+        # Good coin below player
+        self.state_variables['good coin below player'] = False
+        for event in visible_events:
+            if type(event).__name__ == 'Coin':
+                if event.coin_type == 'gold' or event.coin_type == 'blue':
+                    if x_overlap(self.state_variables['player x position'], self.env.unwrapped.player.width, event.x, event.width):
+                        if event.y + event.width >= self.state_variables['player y position'] + self.env.unwrapped.player.height:
+                            self.state_variables['good coin below player'] = True
+                            break
+                    
+        # Good coin left of player
+        self.state_variables['good coin left of player'] = False
+        for event in visible_events:
+            if type(event).__name__ == 'Coin':
+                if event.coin_type == 'gold' or event.coin_type == 'blue':
+                    if event.x < self.state_variables['player x position']:
+                        self.state_variables['good coin left of player'] = True
+                        break
+                    
+        # Bullet left of player
+        self.state_variables['bullet left of player'] = False
+        for event in visible_events:
+            if type(event).__name__ == 'Bullet':
+                if event.x < self.state_variables['player x position']:
+                    self.state_variables['bullet left of player'] = True
+                    break
                     
         # Unreachable and Reachable good coin
         self.state_variables['reachable good coin'] = False
         self.state_variables['unreachable good coin'] = False
         for event in visible_events:
-            if type(event).__name__ == 'Coin' and event.good:
-                if event.y > 30:
-                    self.state_variables['reachable good coin'] = True
-                    break
-                else:
-                    self.state_variables['unreachable good coin'] = True
-                    break
+            if type(event).__name__ == 'Coin':
+                if event.coin_type == 'gold' or event.coin_type == 'blue':
+                    if event.y > 30:
+                        self.state_variables['reachable good coin'] = True
+                        break
+                    else:
+                        self.state_variables['unreachable good coin'] = True
+                        break
                         
         self.state_variables['episode steps'] += 1
         self.total_steps += 1
         
         # If there are some special states, then save anyway
         special = False
-        if self.state_variables['bullet below player'] or self.state_variables['lava below player'] or self.state_variables['two close bullets']:
+        special_states = ['bullet below player', 'lava below player', 'bullet aligned with player', 'player dodging', 'unreachable good coin']
+        if any([self.state_variables[state] for state in special_states]):
             special = True        
     
         # Check if this step will be saved
@@ -144,8 +165,6 @@ class StateExtractorWrapper(gym.Wrapper):
         self.observation = self.env.reset(**kwargs)
         self.state_variables = {
             'episode steps': 0,
-            'player jumping': False,
-            'player falling': False,
         }
         return self.observation
 
