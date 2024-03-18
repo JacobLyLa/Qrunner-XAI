@@ -1,3 +1,4 @@
+import csv
 import itertools
 import math
 import os
@@ -17,6 +18,19 @@ from src.DRL.wrapped_qrunner import wrapped_qrunner_env
 
 # DQN algorithm inspired by:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
+
+def append_to_csv(file_path, hyperparams, episodic_return):
+    file_exists = os.path.isfile(file_path)
+    with open(file_path, 'a', newline='') as csvfile:
+        fieldnames = list(hyperparams.keys()) + ['final_episodic_return']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        if not file_exists:
+            writer.writeheader()
+
+        data = hyperparams.copy()
+        data['final_episodic_return'] = episodic_return
+        writer.writerow(data)
 
 class WindowMetric:
     def __init__(self, size):
@@ -79,16 +93,15 @@ def get_default_hyperparams():
         "duration_eps": 1_000_000,
         "frame_skip": 4,
     }
-        
 
 if __name__ == "__main__":
     log_interval = 1000
-    window_size = 10
-    seed = 0
+    window_size = 20
     num_checkpoints = 20 # + step 0
     default_hyperparams = True
     
     # Set seeds
+    seed = random.randint(0, 1000000)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -103,8 +116,8 @@ if __name__ == "__main__":
         'target_network_frequency': intInterval(500, 2000),
         'batch_size': discrete([16, 32, 64]),
         'train_frequency': intInterval(4, 16),
-        'total_timesteps': discrete([1_000_000]),
-        'learning_starts': discrete([1000]),
+        'total_timesteps': discrete([10_000_000]),
+        'learning_starts': discrete([1000]), # TODO: make this a factor instead
         'buffer_size': discrete([100_000]),
         'start_eps': discrete([1.0]),
         'end_eps': realInterval(0.01, 0.05),
@@ -115,9 +128,9 @@ if __name__ == "__main__":
         hyperparams = get_default_hyperparams()
     else:
         hyperparams = {k: v() for k, v in hyperparam_samplers.items()}
+    hyperparams['seed'] = seed
     print(f"Hyperparameters: {hyperparams}")
     
-
     episodic_return_window = WindowMetric(window_size)
     episodic_length_window = WindowMetric(window_size)
     td_loss_window = WindowMetric(window_size)
@@ -232,4 +245,10 @@ if __name__ == "__main__":
         if global_step in save_points:
             torch.save(q_network.state_dict(), f"{model_path}/model_{global_step}.pt")
             print(f"Saved checkpoint: {global_step}")
+            
+    final_episodic_return_mean = episodic_return_window.get_mean()
+    results_file_path = f"runs/results_summary.csv"
+    append_to_csv(results_file_path, hyperparams, final_episodic_return_mean)
+    print(f"Appended final results to {results_file_path}")
+    
     env.close()
