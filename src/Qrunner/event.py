@@ -117,12 +117,16 @@ class Coin(Event):
                 return
 
     def frame_update_remove(self):
+        if self.x < self.game.camera_offset_x - self.width:
+            return True
         if self.overlap(self.game.player):
             self.game.player.score += self.value
+            self.game.player.coins_picked.append(self.coin_type)
             return True
         return False
 
     def draw(self, window, offset):
+        # TODO: Dont draw if its too far right of the screen
         pygame.draw.circle(window, self.color, (self.x - offset + self.radius, self.y + self.radius), self.radius)
         #pygame.draw.rect(window, (0, 0, 0), (self.x - offset, self.y, self.width, self.height), 1)
 
@@ -150,6 +154,7 @@ class Wall(Event):
                     return
             self.wall_type = 'ground'
         # Air wall
+        # TODO: no collision when jumping from below to avoid impossible levels
         else:
             self.width = random.randint(int(0.2*s), int(0.4*s))
             self.height = random.randint(int(0.03*s), int(0.04*s))

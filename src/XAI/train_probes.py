@@ -50,11 +50,11 @@ if __name__ == '__main__':
     
     # Use (x, ) for single values
     hyperparam_ranges = {
-        'lr': (0.001,),
+        'lr': (0.0001,),
         'batch_size': (256,),
-        'lambda_l1': (0.0, 0.01),
+        'lambda_l1': (0.0,),
         'patience': (10,),
-        'epochs': (100,)
+        'epochs': (200,)
     }
     hyperparams = get_hyperparams_combinations(hyperparam_ranges)
     print(f'Number of hyperparameters configs: {len(hyperparams)}')

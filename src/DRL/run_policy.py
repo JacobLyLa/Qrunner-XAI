@@ -9,29 +9,58 @@ import torch
 from src.DRL.qnetwork import QNetwork
 from src.DRL.wrapped_qrunner import wrapped_qrunner_env
 
-def dqn_policy(model, env):
-    episode = 0
+def dqn_policy(model, env, send_gradients=False):
     obs, info = env.reset()
-    for _ in range(10000):
+    episode = 0
+    num_episodes = 100
+    
+    blue_coins = []
+    red_coins = []
+    gold_coins = []
+    level_progression = []
+    
+    coins_picked = []
+    player_x = 0
+    while episode < num_episodes:
         single_obs = torch.Tensor(obs).unsqueeze(0)
 
         single_obs.requires_grad = True
 
         q_values = model(single_obs)
-        env.unwrapped.push_q_values(q_values.squeeze(0).detach().numpy())
         action = q_values.argmax(dim=1).item()
 
         # Sends gradient
-        gradient = get_gradient(model, single_obs, None, q_values)
-        #gradient = get_smooth_gradient(model, torch.Tensor(obs), None)
-        env.unwrapped.set_gradient(gradient)
+        if send_gradients:
+            gradient = get_gradient(model, single_obs, None, q_values)
+            env.unwrapped.push_q_values(q_values.squeeze(0).detach().numpy())
+            gradient = get_smooth_gradient(model, torch.Tensor(obs), None)
+            env.unwrapped.set_gradient(gradient)
 
         next_obs, reward, terminated, truncated, info = env.step(action)
-        
         if terminated or truncated:
             episode += 1
-            print(info['episode'])
+            #print(info['episode'])
+            blue = coins_picked.count("blue")
+            red = coins_picked.count("red")
+            gold = coins_picked.count("gold")
+            print(f"Blue: {blue}, Red: {red}, Gold: {gold}, Level progression: {player_x}")
+            level_progression.append(player_x)
+            blue_coins.append(blue)
+            red_coins.append(red)
+            gold_coins.append(gold)
+        else:
+            coins_picked = env.player.coins_picked.copy()
+            player_x = env.player.x
         obs = next_obs
+    print(f"Blue: {blue_coins}")
+    print(f"Red: {red_coins}")
+    print(f"Gold: {gold_coins}")
+    print(f"Level progression: {level_progression}")
+    
+    print(f"blue coins mean and std: {np.mean(blue_coins), np.std(blue_coins)}")
+    print(f"red coins mean and std: {np.mean(red_coins), np.std(red_coins)}")
+    print(f"gold coins mean and std: {np.mean(gold_coins), np.std(gold_coins)}")
+    print(f"level progression mean and std: {np.mean(level_progression), np.std(level_progression)}")
 
 def get_gradient(model, single_obs, action, q_values):
     if action is None:
@@ -89,15 +118,15 @@ def main():
     render_salient = False
     record_video = False
     plot_q = False
-    newest = False
+    newest = True
     frame_skip = 4
-    standard_path = "runs/20240224-103820_task_0/model_10000000.pt"
+    standard_path = "runs/20240317-112025_task_0/model_10000000.pt"
     
     model_path = QNetwork.find_newest_model() if newest else standard_path
     model = QNetwork(model_path=model_path)
     
     env = wrapped_qrunner_env(frame_skip=frame_skip, human_render=render_human, render_salient=render_salient, plot_q=plot_q, record_video=record_video, scale=6)
-    dqn_policy(model, env)
+    dqn_policy(model, env, send_gradients=render_salient)
     #random_policy(env)
     env.close()
 

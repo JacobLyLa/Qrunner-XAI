@@ -81,16 +81,16 @@ def get_default_hyperparams():
     return {
         "gamma": 0.98,
         "tau": 1.0,
-        "learning_rate": 0.0001,
+        "learning_rate": 0.00001, # 0.0001
         "target_network_frequency": 1000,
         "batch_size": 32,
         "train_frequency": 4,
-        "total_timesteps": 10_000_000,
-        "learning_starts": 1000,
+        "total_timesteps": 5_000_000,
+        "learning_starts": 10000, # 1000
         "buffer_size": 500000,
-        "start_eps": 1,
+        "start_eps": 0.5, # 1
         "end_eps": 0.05,
-        "duration_eps": 1_000_000,
+        "duration_eps": 500_000, #1m
         "frame_skip": 4,
     }
 
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     q_values_window = WindowMetric(window_size)
     sps_window = WindowMetric(window_size)
     
-    task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0')
+    task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0') # TODO: simplify name if no slurm
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_name = str(date)
     model_path = f"runs/{run_name}_task_{task_id}"
@@ -149,13 +149,15 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
-    q_network = QNetwork().to(device)
+    #q_network = QNetwork().to(device)
+    #q_network = QNetwork(model_path="runs/20240317-112025_task_0/model_10000000.pt").to(device)
+    q_network = QNetwork(model_path="runs/20240321-223500_task_0/model_5000000.pt").to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=hyperparams['learning_rate'])
     target_network = QNetwork().to(device)
     target_network.load_state_dict(q_network.state_dict())
 
     ls = LinearSchedule(hyperparams['start_eps'], hyperparams['end_eps'], hyperparams['duration_eps'])
-    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'])
+    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'])#, human_render=True)
     rb = ReplayBuffer(
         hyperparams['buffer_size'],
         env.observation_space,

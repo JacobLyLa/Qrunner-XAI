@@ -69,7 +69,7 @@ class QrunnerEnv(gym.Env):
         self.generate_event()
 
         obs = self._generate_observation()
-        info = {'coin reward': 0}
+        info = {}
         return obs, info # gym expects 2 values but vec env 1?
     
     def _generate_observation(self):
@@ -93,7 +93,6 @@ class QrunnerEnv(gym.Env):
     
     def step(self, action):
         assert self.action_space.contains(action), f"Invalid action {action} not in {self.action_space}"
-        movement_reward = 0 # To calculate if coins were picked up
         
         if action == 0: # Do nothing
             pass
@@ -105,8 +104,7 @@ class QrunnerEnv(gym.Env):
             if self.need_to_generate_event():
                 self.generate_event()
             if self.player.x - self.last_reward >= 1:
-                movement_reward = self.reward_per_screen * (self.player.x - self.last_reward) / self.GAME_SIZE
-                self.player.score += movement_reward
+                self.player.score += self.reward_per_screen * (self.player.x - self.last_reward) / self.GAME_SIZE
                 self.last_reward = self.player.x
         elif action == 3: # Jump Up
             if self.player.gravity_count == 0:
@@ -161,16 +159,15 @@ class QrunnerEnv(gym.Env):
         if self.player.x - self.camera_offset_x > self.camera_lock_x:
             self.camera_offset_x = self.player.x - self.camera_lock_x
 
-        # Calculate possible reward/punishment
+        # Calculate possible reward
         reward = self.player.score - self.player.score_prev
         self.player.score_prev = self.player.score
-        coin_reward = reward - movement_reward
         
         # Create next observation
         observation = self._generate_observation()
 
         # Additional info (Picked up coin? etc.)
-        info = {'coin reward': coin_reward}
+        info = {}
         terminated = self.game_over
         truncated = False
 
@@ -286,6 +283,7 @@ class QrunnerEnv(gym.Env):
             if keys[pygame.K_s]:
                 action = 4
             observation, reward, terminated, truncated, info = self.step(action)
+
             surface = pygame.surfarray.make_surface(observation.transpose(1, 0, 2))
             
             # Scale surface

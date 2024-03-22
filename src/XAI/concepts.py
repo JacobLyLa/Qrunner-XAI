@@ -113,10 +113,6 @@ concept_instances = [
 	Concept(name="bullet left of player", binary=True,
 	concept_function=lambda state_variables:
 	state_variables['bullet left of player']),
- 
-	Concept(name="bad coin above lava", binary=True,
-	concept_function=lambda state_variables:
-	state_variables['bad coin above lava']),
 ]
 
 concept_instances = {concept.name: concept for concept in concept_instances}

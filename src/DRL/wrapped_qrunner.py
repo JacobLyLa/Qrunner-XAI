@@ -13,6 +13,7 @@ from scipy.ndimage import gaussian_filter
 from tqdm import tqdm
 
 from src.Qrunner.qrunner import QrunnerEnv
+from src.Qrunner.qrunner_modified import ModifiedQrunnerEnv
 
 # Most of the wrappers are based on:
 # (https://gymnasium.farama.org/api/wrappers/)
@@ -95,10 +96,9 @@ class HumanRendering(gym.Wrapper):
         self.window = None
         self.clock = None
         self.frames = []
-        
+
     def step(self, *args, **kwargs):
         result = self.env.step(*args, **kwargs)
-        self._render_frame()
         return result
 
     def reset(self, *args, **kwargs):
@@ -143,8 +143,6 @@ class HumanRendering(gym.Wrapper):
     def close(self):
         super().close()
         if self.window is not None:
-            import pygame
-
             pygame.display.quit()
             pygame.quit()
 
@@ -251,18 +249,14 @@ class RenderWrapper(gym.Wrapper):
 
         return final_obs
 
-class RewardWrapper(gym.Wrapper):
-    def step(self, action):
-        obs, reward, terminated, truncated, info = self.env.step(action)
-        coin_reward = round(info['coin reward'], 6)
-        if coin_reward == 0.2:
-            reward += 1.0
-        return obs, reward, terminated, truncated, info
-
 def wrapped_qrunner_env(frame_skip, max_steps=5000, max_steps_no_reward=50, human_render=False, render_salient=False, plot_q=False, record_video=False, scale=8):
     # If salient or plot q is true, then assert that human render is also true
     assert not (render_salient or plot_q) or human_render
-    env = QrunnerEnv()
+    original = True
+    if original:
+        env = QrunnerEnv()
+    else:
+        env = ModifiedQrunnerEnv()
     if human_render:
         env = RenderWrapper(env, length=100, plot_q=plot_q, render_salient=render_salient)
         env = HumanRendering(env, scale=scale, record_video=record_video)
@@ -275,7 +269,6 @@ def wrapped_qrunner_env(frame_skip, max_steps=5000, max_steps_no_reward=50, huma
     
     env = gym.wrappers.AutoResetWrapper(env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
-    # env = RewardWrapper(env)
     return env
 
 def main():
