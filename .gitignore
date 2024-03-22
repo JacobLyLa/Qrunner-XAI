@@ -1,37 +1,15 @@
-# Ignore JSON files
 *.json
-
-# Ignore PYC files
 *.pyc
-
-# Ignore NPY files
 *.npy
-
-# Ignore PT files
 *.pt
-
-# Ignore PNG files
 *.png
-
-# Ignore TensorFlow events files
+*.gif
 events.out.tfevents.*
-
-# Ignore MP4 files
 *.mp4
-
-# Ignore jpg files
 *.jpg
-
-# Ignore pickle files
 *.pickle
 *.pkl
-
-# Ignore venv
 venv/
 .venv/
-
-# Ignore slurm output files
 *.txt
-
-# Ignore ZIP files likes the ones from SB3
 *.zip
