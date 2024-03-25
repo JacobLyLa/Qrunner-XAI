@@ -99,6 +99,7 @@ class HumanRendering(gym.Wrapper):
 
     def step(self, *args, **kwargs):
         result = self.env.step(*args, **kwargs)
+        self._render_frame()
         return result
 
     def reset(self, *args, **kwargs):
@@ -249,13 +250,13 @@ class RenderWrapper(gym.Wrapper):
 
         return final_obs
 
-def wrapped_qrunner_env(frame_skip, max_steps=5000, max_steps_no_reward=50, human_render=False, render_salient=False, plot_q=False, record_video=False, scale=8):
+def wrapped_qrunner_env(frame_skip, max_steps=5000, max_steps_no_reward=50, human_render=False, render_salient=False, plot_q=False, record_video=False, scale=8, original=True):
     # If salient or plot q is true, then assert that human render is also true
     assert not (render_salient or plot_q) or human_render
-    original = True
     if original:
         env = QrunnerEnv()
     else:
+        max_steps_no_reward = 100
         env = ModifiedQrunnerEnv()
     if human_render:
         env = RenderWrapper(env, length=100, plot_q=plot_q, render_salient=render_salient)

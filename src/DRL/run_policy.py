@@ -32,8 +32,8 @@ def dqn_policy(model, env, send_gradients=False):
         # Sends gradient
         if send_gradients:
             gradient = get_gradient(model, single_obs, None, q_values)
-            env.unwrapped.push_q_values(q_values.squeeze(0).detach().numpy())
-            gradient = get_smooth_gradient(model, torch.Tensor(obs), None)
+            #env.unwrapped.push_q_values(q_values.squeeze(0).detach().numpy())
+            #gradient = get_smooth_gradient(model, torch.Tensor(obs), None)
             env.unwrapped.set_gradient(gradient)
 
         next_obs, reward, terminated, truncated, info = env.step(action)
@@ -114,18 +114,19 @@ def random_policy(env):
     print(f"Average reward: {total_reward / total_episodes}")
 
 def main():
+    original_env = True
     render_human = True
-    render_salient = False
+    render_salient = True
     record_video = False
     plot_q = False
-    newest = True
+    newest = False
     frame_skip = 4
-    standard_path = "runs/20240317-112025_task_0/model_10000000.pt"
+    standard_path = "runs/20240320-134334_task_0/model_1400000.pt"
     
     model_path = QNetwork.find_newest_model() if newest else standard_path
     model = QNetwork(model_path=model_path)
     
-    env = wrapped_qrunner_env(frame_skip=frame_skip, human_render=render_human, render_salient=render_salient, plot_q=plot_q, record_video=record_video, scale=6)
+    env = wrapped_qrunner_env(frame_skip=frame_skip, human_render=render_human, render_salient=render_salient, plot_q=plot_q, record_video=record_video, scale=6, original=original_env)
     dqn_policy(model, env, send_gradients=render_salient)
     #random_policy(env)
     env.close()
