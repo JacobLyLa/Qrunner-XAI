@@ -19,6 +19,7 @@ class QrunnerEnv(gym.Env):
         super(QrunnerEnv, self).__init__()
         pygame.init()
         # Game constants
+        self.cause = None # Cause of termination. doesn't reset (to track previous cause of termination)
         self.ground_height = self.GAME_SIZE // 10
         
         self.reward_per_screen = 0.5

@@ -255,6 +255,7 @@ class Bullet(Event):
                 self.game.player.score += self.VALUE
             else:
                 self.game.game_over = True
+                self.game.cause = 'bullet'
             return True
         return False
 
@@ -307,6 +308,7 @@ class Lava(Event):
         if self.overlap(self.game.player):
             if not self.game.player.star:
                 self.game.game_over = True
+                self.game.cause = 'lava'
         return False
 
     def draw(self, window, offset):

@@ -12,18 +12,21 @@ from src.DRL.wrapped_qrunner import wrapped_qrunner_env
 def dqn_policy(model, env, send_gradients=False):
     obs, info = env.reset()
     episode = 0
-    num_episodes = 100
+    num_episodes = 1000
     
     blue_coins = []
     red_coins = []
     gold_coins = []
     level_progression = []
+    bullet_cause = 0
+    lava_cause = 0
     
     coins_picked = []
     player_x = 0
+    cause = None
+    print(f"Episode {episode}/{num_episodes}")
     while episode < num_episodes:
         single_obs = torch.Tensor(obs).unsqueeze(0)
-
         single_obs.requires_grad = True
 
         q_values = model(single_obs)
@@ -35,15 +38,23 @@ def dqn_policy(model, env, send_gradients=False):
             #env.unwrapped.push_q_values(q_values.squeeze(0).detach().numpy())
             #gradient = get_smooth_gradient(model, torch.Tensor(obs), None)
             env.unwrapped.set_gradient(gradient)
+        else:
+            model.eval()
 
         next_obs, reward, terminated, truncated, info = env.step(action)
+        if env.cause != cause:
+            cause = env.cause
+            if env.cause == "bullet":
+                bullet_cause += 1
+            elif env.cause == "lava":
+                lava_cause += 1
         if terminated or truncated:
             episode += 1
-            #print(info['episode'])
+            if episode % 10 == 0 or episode == num_episodes:
+                print(f"Episode {episode}/{num_episodes}")
             blue = coins_picked.count("blue")
             red = coins_picked.count("red")
             gold = coins_picked.count("gold")
-            print(f"Blue: {blue}, Red: {red}, Gold: {gold}, Level progression: {player_x}")
             level_progression.append(player_x)
             blue_coins.append(blue)
             red_coins.append(red)
@@ -52,10 +63,10 @@ def dqn_policy(model, env, send_gradients=False):
             coins_picked = env.player.coins_picked.copy()
             player_x = env.player.x
         obs = next_obs
-    print(f"Blue: {blue_coins}")
-    print(f"Red: {red_coins}")
-    print(f"Gold: {gold_coins}")
-    print(f"Level progression: {level_progression}")
+    
+    print(f"bullet cause: {bullet_cause}/{num_episodes}")
+    print(f"lava cause: {lava_cause}/{num_episodes}")
+    print(f"timeout: {num_episodes - bullet_cause - lava_cause}/{num_episodes}")
     
     print(f"blue coins mean and std: {np.mean(blue_coins), np.std(blue_coins)}")
     print(f"red coins mean and std: {np.mean(red_coins), np.std(red_coins)}")
@@ -115,13 +126,13 @@ def random_policy(env):
 
 def main():
     original_env = True
-    render_human = True
-    render_salient = True
+    render_human = False
+    render_salient = False
     record_video = False
     plot_q = False
-    newest = False
+    newest = True
     frame_skip = 4
-    standard_path = "runs/20240320-134334_task_0/model_1400000.pt"
+    standard_path = "runs/20240317-112025_task_0/model_10000000.pt"
     
     model_path = QNetwork.find_newest_model() if newest else standard_path
     model = QNetwork(model_path=model_path)
