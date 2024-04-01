@@ -12,10 +12,14 @@ concept_instances = [
 	Concept(name="random continuous", binary=False,
 	concept_function=lambda state_variables:
 	np.random.normal(0, 1)),
-
-	Concept(name="player low", binary=False,
+ 
+	Concept(name="total wall area", binary=False,
 	concept_function=lambda state_variables:
-	state_variables['player y position']),
+	state_variables['total wall area']),
+ 
+	Concept(name="player on grass", binary=True,
+	concept_function=lambda state_variables:
+	state_variables['player on grass']),
 
 	Concept(name="player in air", binary=True,
 	concept_function=lambda state_variables:
@@ -24,10 +28,6 @@ concept_instances = [
  	Concept(name="player dodging", binary=True,
 	concept_function=lambda state_variables:
 	state_variables['player dodging']),
-
-	Concept(name="player dodging in air", binary=True,
-	concept_function=lambda state_variables:
-	state_variables['player falling'] and state_variables['player dodging']),
 
 	Concept(name="player on wall", binary=True,
 	concept_function=lambda state_variables:
@@ -78,13 +78,13 @@ concept_instances = [
 	concept_function=lambda state_variables:
 	state_variables['visible red coins'] > 0),
  
-  	Concept(name="reachable good coin", binary=True,
+  	Concept(name="visible high coin", binary=True,
 	concept_function=lambda state_variables:
-	state_variables['reachable good coin']),
+	state_variables['visible high coin']),
   
-   	Concept(name="unreachable good coin", binary=True,
+   	Concept(name="visible good low coin", binary=True,
 	concept_function=lambda state_variables:
-	state_variables['unreachable good coin']),
+	state_variables['visible good low coin']),
     
 	Concept(name="bullet close", binary=False,
 	concept_function=lambda state_variables:
@@ -93,26 +93,10 @@ concept_instances = [
 	Concept(name="bullet aligned with player", binary=True,
 	concept_function=lambda state_variables:
 	state_variables['bullet aligned with player']),
-
-	Concept(name="bullet below player", binary=True,
-	concept_function=lambda state_variables:
-	state_variables['bullet below player']),
- 
-	Concept(name="lava below player", binary=True,
-	concept_function=lambda state_variables:
-	state_variables['lava below player']),
- 
-	Concept(name="good coin below player", binary=True,
-    concept_function=lambda state_variables:
-    state_variables['good coin below player']),	
  
 	Concept(name="good coin left of player", binary=True,
 	concept_function=lambda state_variables:
 	state_variables['good coin left of player']),
-
-	Concept(name="bullet left of player", binary=True,
-	concept_function=lambda state_variables:
-	state_variables['bullet left of player']),
 ]
 
 concept_instances = {concept.name: concept for concept in concept_instances}
