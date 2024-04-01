@@ -45,21 +45,22 @@ def get_hyperparams_combinations(hyperparams_dict):
 
 
 if __name__ == '__main__':
-    max_size = 20000
+    max_size = 10000
     layer = 4
     
     # Use (x, ) for single values
     hyperparam_ranges = {
-        'lr': (0.0001,),
-        'batch_size': (256,),
+        'lr': (0.01, 0.001, 0.0001, 0.00001),
+        'batch_size': (64,),
         'lambda_l1': (0.0,),
-        'patience': (10,),
-        'epochs': (200,)
+        'patience': (5,),
+        'epochs': (100,)
     }
     hyperparams = get_hyperparams_combinations(hyperparam_ranges)
     print(f'Number of hyperparameters configs: {len(hyperparams)}')
 
-    model_path = QNetwork.find_newest_model()
+    #model_path = QNetwork.find_newest_model()
+    model_path = "runs/20240317-112025/model_10000000.pt"
     model = QNetwork(model_path=model_path)
     
     env_steps = Concept.load_concept_data()
@@ -67,9 +68,6 @@ if __name__ == '__main__':
         start_time = time.time()
         concept.prepare_data(env_steps, max_size=max_size)
         concept.summary()
-        if len(concept.train_data) < 100:
-            print(f'Not enough data')
-            continue
         
         layer_probes, layer_info, best_hyperparams = train_probes(model, concept, hyperparams, [layer])
         concept.save_torch_probe(layer_probes[layer], model.model_name, layer, layer_info[layer]['test_score'][-1])

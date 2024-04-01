@@ -84,11 +84,13 @@ class Concept:
 
         return train_data, test_data, y_train, y_test
 
-    def _prepare_non_binary_data(self, env_steps, train_size, test_size):        
+    def _prepare_non_binary_data(self, env_steps, train_size, test_size, scale):        
         values = []
         for i in range(train_size + test_size):
             values.append(self.concept_function(env_steps[i].state_variables))
         values = np.array(values)
+        if scale:
+            values = values / np.max(values)
 
         # Train test split
         env_steps = env_steps[:train_size + test_size]
@@ -99,14 +101,7 @@ class Concept:
 
         return train_data, test_data, y_train, y_test
 
-    def prepare_data(self, env_steps, test_ratio=0.2, max_size=None):
-        '''
-        Prepare data for the concept
-        Access the data through train_/test_ + obs/images/values
-        Obs: network input
-        Images: network input in human readable image format
-        Values: concept values
-        '''
+    def prepare_data(self, env_steps, test_ratio=0.2, max_size=None, scale=True):
         if not max_size or max_size > len(env_steps):
             max_size = len(env_steps)
 
@@ -117,7 +112,7 @@ class Concept:
         if self.binary:
             train_data, test_data, y_train, y_test = self._prepare_binary_data(env_steps, train_size, test_size)
         else:
-            train_data, test_data, y_train, y_test = self._prepare_non_binary_data(env_steps, train_size, test_size)
+            train_data, test_data, y_train, y_test = self._prepare_non_binary_data(env_steps, train_size, test_size, scale)
 
         self.train_data = np.array(train_data)
         self.test_data = np.array(test_data)

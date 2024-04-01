@@ -132,7 +132,7 @@ def main():
     plot_q = False
     newest = True
     frame_skip = 4
-    standard_path = "runs/20240317-112025_task_0/model_10000000.pt"
+    standard_path = "runs/20240317-112025/model_10000000.pt"
     
     model_path = QNetwork.find_newest_model() if newest else standard_path
     model = QNetwork(model_path=model_path)

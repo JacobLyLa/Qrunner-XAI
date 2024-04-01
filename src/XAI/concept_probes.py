@@ -57,7 +57,7 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
     loss_fn = nn.MSELoss()
     
     # Variables for early stopping
-    best_test_score = -float('inf')
+    best_test_loss = float('inf')
     epochs_without_improvement = 0
 
     for epoch in range(hyperparams['epochs']):
@@ -98,8 +98,8 @@ def _train_probe(binary, hyperparams, train_acts, test_acts, train_values, test_
         test_score.append(score)
         
         # Early stopping
-        if score > best_test_score:
-            best_test_score = score
+        if total_test_loss < best_test_loss * 0.99:
+            best_test_loss = total_test_loss
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1

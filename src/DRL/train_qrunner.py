@@ -137,10 +137,13 @@ if __name__ == "__main__":
     q_values_window = WindowMetric(window_size)
     sps_window = WindowMetric(window_size)
     
-    task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '0') # TODO: simplify name if no slurm
+    task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '-1') # TODO: simplify name if no slurm
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_name = str(date)
-    model_path = f"runs/{run_name}_task_{task_id}"
+    if task_id != '-1':
+        model_path = f"runs/{run_name}_task_{task_id}"
+    else:
+        model_path = f"runs/{run_name}"
     writer = SummaryWriter(model_path)
     writer.add_text("hyperparameters", str(hyperparams))
     
@@ -150,8 +153,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
     #q_network = QNetwork().to(device)
-    #q_network = QNetwork(model_path="runs/20240317-112025_task_0/model_10000000.pt").to(device)
-    q_network = QNetwork(model_path="runs/20240321-223500_task_0/model_5000000.pt").to(device)
+    #q_network = QNetwork(model_path="runs/20240317-112025/model_10000000.pt").to(device)
+    q_network = QNetwork(model_path="runs/20240321-223500/model_5000000.pt").to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=hyperparams['learning_rate'])
     target_network = QNetwork().to(device)
     target_network.load_state_dict(q_network.state_dict())
