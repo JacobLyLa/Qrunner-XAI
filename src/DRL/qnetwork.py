@@ -6,8 +6,9 @@ import torch
 import torch.nn as nn
 
 
-# Architecture inspired from:
+# Architecture inspired by:
 # https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
+# And original DQN paper
 class QNetwork(nn.Module):
     def __init__(self, colors=3, actions=5, model_path=None):
         super().__init__()
@@ -42,7 +43,6 @@ class QNetwork(nn.Module):
 
         x = x / 255.0
         activations = {}
-        #print("Shapes at each layer:")
         for idx, layer in enumerate(self.network.children()):
             x = layer(x)
             if return_acts and idx < len(self.network) - 1:

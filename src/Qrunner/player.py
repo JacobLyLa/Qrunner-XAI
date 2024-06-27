@@ -13,6 +13,7 @@ class Player:
         self.height = height
 
         self.coins_picked = []
+        self.coins_missed = []
         self.velocity_x = velocity_x
         self.velocity_y = velocity_y
         self.score = 0

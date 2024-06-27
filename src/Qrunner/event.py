@@ -118,6 +118,7 @@ class Coin(Event):
 
     def frame_update_remove(self):
         if self.x < self.game.camera_offset_x - self.width:
+            self.game.player.coins_missed.append(self.coin_type)
             return True
         if self.overlap(self.game.player):
             self.game.player.score += self.value

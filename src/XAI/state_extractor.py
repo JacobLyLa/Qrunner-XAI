@@ -80,6 +80,26 @@ class StateExtractorWrapper(gym.Wrapper):
                         self.state_variables['bullet aligned with player'] = True
                         break
                     
+        # Bullet above player (overlap in x and )
+        self.state_variables['bullet above player'] = False
+        for event in visible_events:
+            if type(event).__name__ == 'Bullet':
+                if self.state_variables['player y position'] - event.y < 20:
+                    if event.x + event.width > self.state_variables['player x position'] and event.x < self.state_variables['player x position'] + self.env.unwrapped.player.width:
+                        self.state_variables['bullet above player'] = True
+                        break
+                    
+        # Wall within 20 units to the right of player
+        self.state_variables['wall right of player'] = False
+        if not self.state_variables['visible bullets']:
+            for event in visible_events:
+                if type(event).__name__ == 'Wall':
+                    if event.wall_type == 'ground':
+                        if event.x > self.state_variables['player x position']:
+                            if event.x < self.state_variables['player x position'] + 20:
+                                self.state_variables['wall right of player'] = True
+                                break
+                    
         # Good coin left of player
         self.state_variables['good coin left of player'] = False
         for event in visible_events:
@@ -104,7 +124,7 @@ class StateExtractorWrapper(gym.Wrapper):
         
         # If there are some special states, then save anyway
         special = False
-        special_states = ['bullet aligned with player', 'player dodging', 'good coin left of player']
+        special_states = ['bullet aligned with player', 'player dodging', 'good coin left of player', 'bullet above player', 'wall right of player']
         if any([self.state_variables[state] for state in special_states]):
             special = True        
     
@@ -116,9 +136,7 @@ class StateExtractorWrapper(gym.Wrapper):
     
     def reset(self, **kwargs):
         self.observation = self.env.reset(**kwargs)
-        self.state_variables = {
-            'episode steps': 0,
-        }
+        self.state_variables = {}
         return self.observation
 
     def save_data(self):

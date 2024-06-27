@@ -79,26 +79,27 @@ def discrete(values):
 
 def get_default_hyperparams():
     return {
-        "gamma": 0.98,
+        "gamma": 0.95,
         "tau": 1.0,
-        "learning_rate": 0.00001, # 0.0001
-        "target_network_frequency": 1000,
-        "batch_size": 32,
+        "learning_rate": 0.0001,
+        "target_network_frequency": 2000,
+        "batch_size": 64,
         "train_frequency": 4,
-        "total_timesteps": 5_000_000,
-        "learning_starts": 10000, # 1000
-        "buffer_size": 500000,
+        "total_timesteps": 5_000_000, # 10m
+        "learning_starts": 1000,
+        "buffer_size": 500_000,
         "start_eps": 0.5, # 1
         "end_eps": 0.05,
-        "duration_eps": 500_000, #1m
-        "frame_skip": 4,
+        "duration_eps": 500_000,
+        "frame_skip": 5,
     }
 
 if __name__ == "__main__":
     log_interval = 1000
     window_size = 20
-    num_checkpoints = 20 # + step 0
+    num_checkpoints = 10 # + step 0
     default_hyperparams = True
+    time_limit = 60 * 60 * 20 # 2 hours
     
     # Set seeds
     seed = random.randint(0, 1000000)
@@ -118,11 +119,11 @@ if __name__ == "__main__":
         'train_frequency': intInterval(4, 16),
         'total_timesteps': discrete([10_000_000]),
         'learning_starts': discrete([1000]), # TODO: make this a factor instead
-        'buffer_size': discrete([100_000]),
+        'buffer_size': discrete([100_000, 250_000, 500_000]),
         'start_eps': discrete([1.0]),
         'end_eps': realInterval(0.01, 0.05),
         'duration_eps': intInterval(50_000, 500_000),
-        'frame_skip': discrete([1, 2, 3, 4]),
+        'frame_skip': discrete([1, 2, 3, 4, 5]),
     }
     if default_hyperparams:
         hyperparams = get_default_hyperparams()
@@ -147,20 +148,22 @@ if __name__ == "__main__":
     writer = SummaryWriter(model_path)
     writer.add_text("hyperparameters", str(hyperparams))
     
-    save_points = [int(hyperparams['total_timesteps'] / num_checkpoints) * i for i in range(num_checkpoints + 1)]
+    # save_points = [int(hyperparams['total_timesteps'] / num_checkpoints) * i for i in range(num_checkpoints + 1)]
+    save_points = [0, 10**1, 10**1.5, 10**2, 10**2.5, 10**3, 10**3.5, 10**4, 10**4.5, 10**5, 10**5.5, 10**6, 10**6.5, 10**7]
+    save_points = [int(x) for x in save_points]
     print(f"Saving at checkpoints: {save_points}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
     #q_network = QNetwork().to(device)
-    #q_network = QNetwork(model_path="runs/20240317-112025/model_10000000.pt").to(device)
-    q_network = QNetwork(model_path="runs/20240321-223500/model_5000000.pt").to(device)
+    #q_network = QNetwork(model_path="runs/20240416-095130/model_9999000.pt").to(device)
+    q_network = QNetwork(model_path="runs/20240417-104259/model_4999000.pt").to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=hyperparams['learning_rate'])
     target_network = QNetwork().to(device)
     target_network.load_state_dict(q_network.state_dict())
 
     ls = LinearSchedule(hyperparams['start_eps'], hyperparams['end_eps'], hyperparams['duration_eps'])
-    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'])#, human_render=True)
+    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'], original=True)#, human_render=True)
     rb = ReplayBuffer(
         hyperparams['buffer_size'],
         env.observation_space,
@@ -194,7 +197,7 @@ if __name__ == "__main__":
             writer.add_scalar('episodic_return', episodic_return_window.get_mean(), global_step)
             writer.add_scalar('episodic_length', episodic_length_window.get_mean(), global_step)
 
-        # Handle truncated episodes
+        # Handle truncated episodes... TODO...
         real_next_obs = next_obs
         if truncated:
             real_next_obs = info["final_observation"]
@@ -245,11 +248,18 @@ if __name__ == "__main__":
                 
                 writer.add_scalar('epsilon', epsilon, global_step)
                 writer.add_scalar('steps_per_second', int(global_step / (time.time() - start_time)), global_step)
-            
+        
+        time_done = time.time() - start_time > time_limit    
+        
         # Possibly save model
-        if global_step in save_points:
-            torch.save(q_network.state_dict(), f"{model_path}/model_{global_step}.pt")
-            print(f"Saved checkpoint: {global_step}")
+        steps_after_start = global_step - hyperparams['learning_starts']
+        if steps_after_start in save_points or time_done or global_step >= hyperparams['total_timesteps']:
+            torch.save(q_network.state_dict(), f"{model_path}/model_{steps_after_start}.pt")
+            print(f"Saved checkpoint: {steps_after_start}")
+            
+        if time_done:
+            print("Time limit reached")
+            break
             
     final_episodic_return_mean = episodic_return_window.get_mean()
     results_file_path = f"runs/results_summary.csv"

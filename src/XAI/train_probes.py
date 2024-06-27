@@ -32,6 +32,7 @@ def save_plot(concept, info):
 
     plt.tight_layout()
     plt.savefig(f'{concept.folder_path}probe_training.png')
+    plt.close()
     
 def get_hyperparams_combinations(hyperparams_dict):
     keys, value_tuples = zip(*hyperparams_dict.items())
@@ -46,11 +47,11 @@ def get_hyperparams_combinations(hyperparams_dict):
 
 if __name__ == '__main__':
     max_size = 10000
-    layer = 4
+    layer = 5
     
     # Use (x, ) for single values
     hyperparam_ranges = {
-        'lr': (0.01, 0.001, 0.0001, 0.00001),
+        'lr': (0.01, 0.001, 0.0001),
         'batch_size': (64,),
         'lambda_l1': (0.0,),
         'patience': (5,),
