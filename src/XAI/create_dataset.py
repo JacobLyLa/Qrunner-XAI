@@ -1,11 +1,11 @@
 import argparse
 import random
-import numpy as np
 import torch
 from tqdm import tqdm
 
-from src.DRL.qnetwork import QNetwork
-from src.DRL.wrapped_qrunner import wrapped_qrunner_env
+from src.DRL.DQN import DQN
+from src.Qrunner.qrunner import QrunnerEnv
+from src.DRL.wrapped_qrunner import QrunnerWrapper
 from src.XAI.state_extractor import StateExtractorWrapper
 
 if __name__ == '__main__':
@@ -18,11 +18,21 @@ if __name__ == '__main__':
     parser.add_argument('--model_path', type=str, help='Path to the model file', default='runs/20240317-112025/model_10000000.pt')
     args = parser.parse_args()
 
-    model_path = QNetwork.find_newest_model() if args.newest else args.model_path
-    model = QNetwork(model_path=model_path)
+    """
+    model_path = args.model_path
+    model = DQN(input_channels=1, use_dueling=False)
+    model.load_state_dict(torch.load(model_path))
     model.eval()
+    """
     
-    env = wrapped_qrunner_env(frame_skip=args.frame_skip)
+    env = QrunnerWrapper(
+        QrunnerEnv(),
+        max_steps=1000,
+        max_steps_reward=150,
+        blending_alpha=0.7,
+        frame_skip=4,
+        use_grayscale=False
+    )
     env = StateExtractorWrapper(env, save_interval=args.steps//args.samples)
     obs, info = env.reset()
 

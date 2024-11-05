@@ -13,3 +13,7 @@ venv/
 .venv/
 *.txt
 *.zip
+*.pth
+*.log
+*.yaml
+*.wandb

@@ -1,7 +1,3 @@
-import csv
-import itertools
-import math
-import os
 import random
 import time
 from datetime import datetime
@@ -11,159 +7,70 @@ import torch
 import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.nn.functional import mse_loss
-from torch.utils.tensorboard import SummaryWriter
+from src.Qrunner.qrunner import QrunnerEnv
+from src.DRL.DQN import DQN
+from src.DRL.wrapped_qrunner import QrunnerWrapper, HumanRenderWrapper
+import wandb
 
-from src.DRL.qnetwork import QNetwork
-from src.DRL.wrapped_qrunner import wrapped_qrunner_env
-
-# DQN algorithm inspired by:
-# https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/dqn_atari.py#L30
-
-def append_to_csv(file_path, hyperparams, episodic_return):
-    file_exists = os.path.isfile(file_path)
-    with open(file_path, 'a', newline='') as csvfile:
-        fieldnames = list(hyperparams.keys()) + ['final_episodic_return']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-        if not file_exists:
-            writer.writeheader()
-
-        data = hyperparams.copy()
-        data['final_episodic_return'] = episodic_return
-        writer.writerow(data)
-
-class WindowMetric:
-    def __init__(self, size):
-        self.size = size
-        self.window = []
-
-    def add(self, value):
-        if len(self.window) == self.size:
-            self.window.pop(0)
-        self.window.append(value)
-
-    def get_mean(self):
-        if not self.window:
-            return 0
-        return sum(self.window) / len(self.window)
-
-class LinearSchedule:
-    def __init__(self, start, end, duration):
-        self.start = start
-        self.end = end
-        self.duration = duration
-        self.step_count = 0
-
-    def step(self):
-        if self.step_count >= self.duration:
-            return self.end
-
-        value = self.start + (self.end - self.start) * (self.step_count / self.duration)
-        self.step_count += 1
-        return value
+def linear_schedule(start, end, duration, step):
+    if step >= duration:
+        return end
+    return start + (end - start) * (step / duration)
     
-def realInterval(low, high):
-    def _sample():
-        return round(random.uniform(low, high), 6)
-    return _sample
-
-def intInterval(low, high):
-    def _sample():
-        return random.randint(low, high)
-    return _sample
-
-def discrete(values):
-    def _sample():
-        return random.choice(values)
-    return _sample
-
 def get_default_hyperparams():
     return {
+        "learning_rate": 0.00005,
         "gamma": 0.95,
-        "tau": 1.0,
-        "learning_rate": 0.0001,
-        "target_network_frequency": 2000,
         "batch_size": 64,
-        "train_frequency": 4,
-        "total_timesteps": 5_000_000, # 10m
-        "learning_starts": 1000,
+        "train_frequency": 5,
+        "target_model_frequency": 2000,
+        "total_timesteps": 1_000_000,
+        "learning_starts_fraction": 0.01,
+        "duration_eps_fraction": 0.3,
         "buffer_size": 500_000,
-        "start_eps": 0.5, # 1
-        "end_eps": 0.05,
-        "duration_eps": 500_000,
-        "frame_skip": 5,
+        "start_eps": 1.0,
+        "end_eps": 0.01,
+        "frame_skip": 4,
+        "max_steps": 2000,
+        "max_steps_reward": 150,
+        "blending_alpha": 0.7,
+        "grad_clip": 1.0,
+        "use_grayscale": False,
+        "use_double": False,
+        "use_dueling": False,
     }
 
-if __name__ == "__main__":
+def train(hyperparams):
     log_interval = 1000
-    window_size = 20
-    num_checkpoints = 10 # + step 0
-    default_hyperparams = True
-    time_limit = 60 * 60 * 20 # 2 hours
+    time_limit = 60 * 60 * 2 # 2 hour
+    eval_episodes = 1000
     
-    # Set seeds
-    seed = random.randint(0, 1000000)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    
-    hyperparam_samplers = {
-        'gamma': realInterval(0.9, 0.99),
-        'tau': realInterval(0.9, 1.0),
-        'learning_rate': realInterval(0.0001, 0.001),
-        'target_network_frequency': intInterval(500, 2000),
-        'batch_size': discrete([16, 32, 64]),
-        'train_frequency': intInterval(4, 16),
-        'total_timesteps': discrete([10_000_000]),
-        'learning_starts': discrete([1000]), # TODO: make this a factor instead
-        'buffer_size': discrete([100_000, 250_000, 500_000]),
-        'start_eps': discrete([1.0]),
-        'end_eps': realInterval(0.01, 0.05),
-        'duration_eps': intInterval(50_000, 500_000),
-        'frame_skip': discrete([1, 2, 3, 4, 5]),
-    }
-    if default_hyperparams:
-        hyperparams = get_default_hyperparams()
-    else:
-        hyperparams = {k: v() for k, v in hyperparam_samplers.items()}
-    hyperparams['seed'] = seed
-    print(f"Hyperparameters: {hyperparams}")
-    
-    episodic_return_window = WindowMetric(window_size)
-    episodic_length_window = WindowMetric(window_size)
-    td_loss_window = WindowMetric(window_size)
-    q_values_window = WindowMetric(window_size)
-    sps_window = WindowMetric(window_size)
-    
-    task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '-1') # TODO: simplify name if no slurm
-    date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_name = str(date)
-    if task_id != '-1':
-        model_path = f"runs/{run_name}_task_{task_id}"
-    else:
-        model_path = f"runs/{run_name}"
-    writer = SummaryWriter(model_path)
-    writer.add_text("hyperparameters", str(hyperparams))
-    
-    # save_points = [int(hyperparams['total_timesteps'] / num_checkpoints) * i for i in range(num_checkpoints + 1)]
-    save_points = [0, 10**1, 10**1.5, 10**2, 10**2.5, 10**3, 10**3.5, 10**4, 10**4.5, 10**5, 10**5.5, 10**6, 10**6.5, 10**7]
-    save_points = [int(x) for x in save_points]
-    print(f"Saving at checkpoints: {save_points}")
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
-    #q_network = QNetwork().to(device)
-    #q_network = QNetwork(model_path="runs/20240416-095130/model_9999000.pt").to(device)
-    q_network = QNetwork(model_path="runs/20240417-104259/model_4999000.pt").to(device)
-    optimizer = optim.Adam(q_network.parameters(), lr=hyperparams['learning_rate'])
-    target_network = QNetwork().to(device)
-    target_network.load_state_dict(q_network.state_dict())
+    print(f"Hyperparameters: {hyperparams}")
+    
+    # Calculate actual learning_starts and duration_eps
+    learning_starts = int(hyperparams['learning_starts_fraction'] * hyperparams['total_timesteps'])
+    duration_eps = int(hyperparams['duration_eps_fraction'] * hyperparams['total_timesteps'])
 
-    ls = LinearSchedule(hyperparams['start_eps'], hyperparams['end_eps'], hyperparams['duration_eps'])
-    env = wrapped_qrunner_env(frame_skip=hyperparams['frame_skip'], original=True)#, human_render=True)
+    # Initialize environment with grayscale option
+    env = QrunnerWrapper(
+        QrunnerEnv(),
+        max_steps=hyperparams['max_steps'],
+        max_steps_reward=hyperparams['max_steps_reward'],
+        blending_alpha=hyperparams['blending_alpha'],
+        frame_skip=hyperparams['frame_skip'],
+        use_grayscale=hyperparams['use_grayscale']
+    )
+    #env = HumanRenderWrapper(env, scale=6, fps=0, wrapped_render=True)
+
+    # Initialize DQN with appropriate input channels and hyperparameters
+    input_channels = 1 if hyperparams['use_grayscale'] else 3
+    model = DQN(input_channels=input_channels, use_dueling=hyperparams['use_dueling']).to(device)
+    target_model = DQN(input_channels=input_channels, use_dueling=hyperparams['use_dueling']).to(device)
+    target_model.load_state_dict(model.state_dict())
+
+    optimizer = optim.Adam(model.parameters(), lr=hyperparams['learning_rate'])
     rb = ReplayBuffer(
         hyperparams['buffer_size'],
         env.observation_space,
@@ -175,95 +82,152 @@ if __name__ == "__main__":
     )
     print(f"Replaybuffer allocates {(rb.observations.nbytes + rb.actions.nbytes + rb.rewards.nbytes + rb.dones.nbytes) / 1e9}GB", flush=True)
     
-    obs, info = env.reset(seed=seed)
+    obs, info = env.reset()
+    done = False
     start_time = time.time()
-    loss = None
+    last_log_time = start_time
+
     for global_step in range(hyperparams['total_timesteps'] + 1):
+        if done:
+            obs, info = env.reset()
         # Determine and perform action
-        epsilon = ls.step()
+        epsilon = linear_schedule(hyperparams['start_eps'], hyperparams['end_eps'], duration_eps, global_step)
         if random.random() < epsilon:
             action = env.action_space.sample()
         else:
-            tensor_obs = torch.Tensor(obs).to(device)
-            reshaped_obs = tensor_obs.unsqueeze(0)
-            q_values = q_network(reshaped_obs)
-            action = q_values.argmax(dim=1).item()
+            with torch.no_grad():
+                action = model(torch.Tensor(obs).unsqueeze(0).to(device)).argmax(dim=1).item()
         next_obs, reward, terminated, truncated, info = env.step(action)
 
-        # Log episodic metrics
-        if "episode" in info:
-            episodic_return_window.add(info["episode"]["r"][0])
-            episodic_length_window.add(info["episode"]["l"])
-            writer.add_scalar('episodic_return', episodic_return_window.get_mean(), global_step)
-            writer.add_scalar('episodic_length', episodic_length_window.get_mean(), global_step)
-
-        # Handle truncated episodes... TODO...
-        real_next_obs = next_obs
-        if truncated:
-            real_next_obs = info["final_observation"]
-        rb.add(obs, real_next_obs, np.array([action]), reward, terminated, info)
+        if not truncated:
+            rb.add(obs, next_obs, np.array([action]), reward, terminated, info)
         obs = next_obs
 
         # Possibly train
-        if global_step >= hyperparams['learning_starts']:
+        if global_step >= learning_starts:
             if global_step % hyperparams['train_frequency'] == 0:
                 data = rb.sample(hyperparams['batch_size'])
+                
                 with torch.no_grad():
-                    next_observation_q_values = target_network(data.next_observations)
-                    # Extract maximum Q-value for each next observation.
-                    target_max_q_values, _ = next_observation_q_values.max(dim=1)
+                    if hyperparams['use_double']:
+                        # Double DQN
+                        actions_next = model(data.next_observations).argmax(dim=1, keepdim=True)
+                        next_q_values = target_model(data.next_observations)
+                        target_max_q_values = next_q_values.gather(1, actions_next).squeeze()
+                    else:
+                        # Standard DQN
+                        target_max_q_values = target_model(data.next_observations).max(dim=1)[0]
                     
-                    # Calculate the TD target for each observation.
-                    # If episode ends (done flag is 1), the future Q-value is not considered.
-                    future_values = hyperparams['gamma'] * target_max_q_values * (1 - data.dones.flatten())
-                    td_targets = data.rewards.flatten() + future_values
+                    # Compute TD targets
+                    td_targets = data.rewards.flatten() + hyperparams['gamma'] * target_max_q_values * (1 - data.dones.flatten())
 
-                # Compute Q-values of current observations using the main Q-network.
-                current_observation_q_values = q_network(data.observations)
-
-                # Extract the Q-values of the taken actions.
-                action_q_values = current_observation_q_values.gather(1, data.actions).squeeze()
-
-                # Compute the mean squared error loss.
-                loss = mse_loss(td_targets, action_q_values)
+                # Compute current Q values
+                current_values = model(data.observations).gather(1, data.actions).squeeze()
+                
+                # Calculate loss
+                loss = mse_loss(td_targets, current_values)
 
                 # Optimize the model
                 optimizer.zero_grad()
                 loss.backward()
+                
+                torch.nn.utils.clip_grad_norm_(model.parameters(), hyperparams['grad_clip'])
+                
                 optimizer.step()
-
+            
             # Update target network
-            if global_step % hyperparams['target_network_frequency'] == 0:
-                for target_network_param, q_network_param in zip(target_network.parameters(), q_network.parameters()):
-                    target_network_param.data.copy_(
-                        hyperparams['tau'] * q_network_param.data + (1.0 - hyperparams['tau']) * target_network_param.data
-                    )
+            if global_step % hyperparams['target_model_frequency'] == 0:
+                target_model.load_state_dict(model.state_dict())
 
             # Log non-episodic metrics
-            if global_step % log_interval == 0 and loss is not None:
-                td_loss_window.add(loss.item())
-                q_values_window.add(action_q_values.mean().item())
-                writer.add_scalar('td_loss', td_loss_window.get_mean(), global_step)
-                writer.add_scalar('q_values', q_values_window.get_mean(), global_step)
-                
-                writer.add_scalar('epsilon', epsilon, global_step)
-                writer.add_scalar('steps_per_second', int(global_step / (time.time() - start_time)), global_step)
+            if global_step % log_interval == 0:
+                current_time = time.time()
+                elapsed_time = current_time - last_log_time
+                fps = log_interval / elapsed_time if elapsed_time > 0 else 0.0
+                last_log_time = current_time
+
+                wandb.log({
+                    "TD Loss": loss.item(),
+                    "Epsilon": epsilon,
+                    "Average Q-value": current_values.mean().item(),
+                    "FPS": fps  # Logging FPS
+                }, step=global_step)
         
-        time_done = time.time() - start_time > time_limit    
+        # Log episodic metrics
+        done = terminated or truncated
+        if done:
+            # Count occurrences of each interaction type
+            interactions = info['interactions']
+            interaction_counts = {
+                "(E) Gold coin count": interactions.count("gold coin"),
+                "(E) Red coin count": interactions.count("red coin"),
+                "(E) Blue coin count": interactions.count("blue coin"),
+                "(E) Bullet count": interactions.count("bullet"),
+                "(E) Lava count": interactions.count("lava"),
+            }
+
+            # Convert truncated to 1 if True, else 0
+            truncated_flag = 1.0 if truncated else 0.0
+
+            # Log the metrics with individual interaction counts
+            wandb.log({
+                "(E) Total reward": info['total_reward'],
+                "(E) DQN step": info['wrapper_steps'],
+                "(E) Level progress": info['level_progress'],
+                **interaction_counts,
+                "(E) Truncated": truncated_flag
+            }, step=global_step)
+        time_done = time.time() - start_time > time_limit
         
-        # Possibly save model
-        steps_after_start = global_step - hyperparams['learning_starts']
-        if steps_after_start in save_points or time_done or global_step >= hyperparams['total_timesteps']:
-            torch.save(q_network.state_dict(), f"{model_path}/model_{steps_after_start}.pt")
-            print(f"Saved checkpoint: {steps_after_start}")
-            
         if time_done:
             print("Time limit reached")
             break
             
-    final_episodic_return_mean = episodic_return_window.get_mean()
-    results_file_path = f"runs/results_summary.csv"
-    append_to_csv(results_file_path, hyperparams, final_episodic_return_mean)
-    print(f"Appended final results to {results_file_path}")
+    # Evaluation loop
+    print("Starting evaluation...")
+    eval_rewards = []
+    for _ in range(eval_episodes):
+        obs, info = env.reset()
+        done = False
+        episode_reward = 0
+        while not done:
+            if random.random() < epsilon:
+                action = env.action_space.sample()
+            else:
+                with torch.no_grad():
+                    action = model(torch.Tensor(obs).unsqueeze(0).to(device)).argmax(dim=1).item()
+            obs, reward, terminated, truncated, info = env.step(action)
+            episode_reward += reward
+            done = terminated or truncated
+        eval_rewards.append(episode_reward)
+
+    avg_eval_reward = sum(eval_rewards) / len(eval_rewards)
+    print(f"Average evaluation reward: {avg_eval_reward}")
+
+    # Log evaluation results
+    wandb.log({"eval/average_reward": avg_eval_reward})
     
+    # Save model
+    torch.save(model.state_dict(), f"models/qrunner_dqn_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pth")
+
     env.close()
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sweep", action="store_true", help="Run as part of a wandb sweep")
+    args = parser.parse_args()
+
+    if args.sweep:
+        wandb.init()
+    else:
+        wandb.init(
+            project="Qrunner-XAI",
+            entity="jacob-llarsen",
+            name=str(datetime.now().strftime("%Y%m%d-%H%M%S")),
+            config=get_default_hyperparams()
+        )
+        
+    train(wandb.config)
+
+    wandb.finish()

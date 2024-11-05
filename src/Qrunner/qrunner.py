@@ -8,7 +8,7 @@ import numpy as np
 import pygame
 from gymnasium import spaces
 
-from src.Qrunner.event import Bullet, Coin, Lava, Portal, Shuriken, Star, Wall
+from src.Qrunner.event import Bullet, Coin, Lava, Wall
 from src.Qrunner.player import Player
 
 
@@ -19,7 +19,6 @@ class QrunnerEnv(gym.Env):
         super(QrunnerEnv, self).__init__()
         pygame.init()
         # Game constants
-        self.cause = None # Cause of termination. doesn't reset (to track previous cause of termination)
         self.ground_height = self.GAME_SIZE // 10
         
         self.reward_per_screen = 0.5
@@ -44,7 +43,7 @@ class QrunnerEnv(gym.Env):
         self.render_mode = "rgb_array" # Only rgb_array supported, use run for human mode
         self.num_actions = 5
         self.action_space = spaces.Discrete(self.num_actions)
-        self.observation_space = spaces.Box(low=0, high=255, shape=(self.GAME_SIZE, self.GAME_SIZE, 3), dtype=np.uint8)
+        self.observation_space = spaces.Box(low=0, high=255, shape=(3, self.GAME_SIZE, self.GAME_SIZE), dtype=np.uint8)
         self.reward_range = (-1, 1)
         
         # Internal surface for game logic (fixed size)
@@ -61,8 +60,10 @@ class QrunnerEnv(gym.Env):
         self.player = Player(self.camera_lock_x, self.GAME_SIZE - self.ground_height - self.player_height, self.player_width, self.player_height, self.velocity_x, self.velocity_y)
         self.game_over = False
         self.active_events = []
+        self.interactions = []
 
         self.difficulty = 0
+        self.steps_taken = 0
         self.last_reward = self.camera_lock_x
 
         # Start game with a random event
@@ -70,7 +71,7 @@ class QrunnerEnv(gym.Env):
         self.generate_event()
 
         obs = self._generate_observation()
-        info = {}
+        info = {'real steps': self.steps_taken, 'level progress': self.player.x / self.GAME_SIZE, 'interactions': self.interactions}
         return obs, info # gym expects 2 values but vec env 1?
     
     def _generate_observation(self):
@@ -88,13 +89,15 @@ class QrunnerEnv(gym.Env):
 
         # Convert surface to array
         observation = pygame.surfarray.array3d(self.surface)
-        observation = np.transpose(observation, (1, 0, 2))
+        # Transpose to channel first format
+        observation = np.transpose(observation, (2, 0, 1))
         self.last_observation = observation
         return observation
     
     def step(self, action):
         assert self.action_space.contains(action), f"Invalid action {action} not in {self.action_space}"
         
+        self.steps_taken += 1
         if action == 0: # Do nothing
             pass
         if action == 1: # Move Left
@@ -135,7 +138,7 @@ class QrunnerEnv(gym.Env):
             self.player.gravity_count = 0
             self.player.jumping = False
 
-        # Remove old events
+        # Remove/Update old events
         # Update wall events first
         to_remove = []
         for event in self.active_events:
@@ -160,15 +163,15 @@ class QrunnerEnv(gym.Env):
         if self.player.x - self.camera_offset_x > self.camera_lock_x:
             self.camera_offset_x = self.player.x - self.camera_lock_x
 
-        # Calculate possible reward
+        # Calculate reward
         reward = self.player.score - self.player.score_prev
         self.player.score_prev = self.player.score
         
         # Create next observation
         observation = self._generate_observation()
 
-        # Additional info (Picked up coin? etc.)
-        info = {}
+        # Additional info (num coins collected? etc.)
+        info = {'level_progress': self.player.x / self.GAME_SIZE, 'interactions': self.interactions}
         terminated = self.game_over
         truncated = False
 
