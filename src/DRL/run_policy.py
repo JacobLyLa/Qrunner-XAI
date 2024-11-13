@@ -1,15 +1,12 @@
-import os
-import random
-import re
-import time
-import argparse
 
-import numpy as np
+import random
+
 import torch
 
 from src.DRL.DQN import DQN
-from src.DRL.wrapped_qrunner import QrunnerWrapper, HumanRenderWrapper
+from src.DRL.wrapped_qrunner import HumanRenderWrapper, QrunnerWrapper
 from src.Qrunner.qrunner import QrunnerEnv
+
 
 def random_policy(env):
     obs, info = env.reset()
@@ -37,19 +34,18 @@ def dqn_policy(model, env):
                 state = torch.Tensor(obs).unsqueeze(0)
                 q_values = model(state)
                 action = q_values.argmax(dim=1).item()
-        next_obs, reward, terminated, truncated, info = env.step(action)
+        obs, reward, terminated, truncated, info = env.step(action)
         if terminated or truncated:
             print(info)
             obs, info = env.reset()
-        else:
-            obs = next_obs
 
 def main():
-    model_path = "models/qrunner_dqn_20240925_094136.pth"
-    model = DQN(use_dueling=True)
-    model.load_state_dict(torch.load(model_path))
+    load_path = "models/qrunner_dqn_20241106_114947.pth"
+    model_weights = torch.load(load_path, weights_only=True)
+    model = DQN(use_dueling=False)
+    model.load_state_dict(model_weights)
     model.eval()
-    print(f"Loaded model from {model_path}")
+    print(f"Loaded model from {load_path}")
 
     # Initialize environment with grayscale option
     env = QrunnerWrapper(

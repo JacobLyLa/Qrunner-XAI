@@ -5,62 +5,82 @@ class DQN(nn.Module):
         super().__init__()
         self.input_channels = input_channels
         self.use_dueling = use_dueling
-
-        """
+        
         self.feature_extractor = nn.Sequential(
-            nn.Conv2d(input_channels, 64, 8, stride=4, bias=False),
+            nn.Conv2d(input_channels, 32, 8, stride=4, bias=False),
             nn.ReLU(),
-            nn.Conv2d(64, 64, 4, stride=2, bias=False),
+            nn.Conv2d(32, 32, 4, stride=2, bias=False),
             nn.ReLU(),
-            nn.Conv2d(64, 64, 3, stride=1, bias=False),
+            nn.Conv2d(32, 32, 3, stride=1, bias=False),
             nn.ReLU(),
-            nn.Flatten()
-        )
-        """
-
-        self.feature_extractor = nn.Sequential(
-            nn.Conv2d(input_channels, 64, 3, bias=False), # 84x84 -> 82x82
-            nn.ReLU(),
-            nn.MaxPool2d(2), # 82x82 -> 41x41
-            nn.Conv2d(64, 64, 3, bias=False), # 41x41 -> 39x39
-            nn.ReLU(),
-            nn.MaxPool2d(2), # 39x39 -> 19x19
-            nn.Conv2d(64, 64, 3, bias=False), # 19x19 -> 17x17
-            nn.ReLU(),
-            nn.MaxPool2d(2), # 17x17 -> 8x8
             nn.Flatten()
         )
         
         self.fc = nn.Sequential(
-            nn.Linear(64 * 8 * 8, 128),
+            nn.Linear(32 * 7 * 7, 64),
             nn.ReLU()
         )
-
+        
         if self.use_dueling:
             # Dueling DQN: Separate streams for Value and Advantage
             self.value_stream = nn.Sequential(
-                nn.Linear(128, 1),
+                nn.Linear(64, 1),
             )
             
             self.advantage_stream = nn.Sequential(
-                nn.Linear(128, actions),
+                nn.Linear(64, actions),
             )
         else:
             # Standard DQN: Single output stream
-            self.output = nn.Linear(128, actions)
+            self.output = nn.Linear(64, actions)
 
-    def forward(self, x):
-        x = self.feature_extractor(x / 255.0)
-        x = self.fc(x)
-        
+    def forward(self, x, return_acts=False):
+        # Note: return_acts detaches the activations from the graph; can't directly backprop through them
+        activations = {}
+        layer_idx = 0  # To keep track of layer indices for activation storage
+
+        # Normalize input
+        x = x / 255.0
+
+        # Iterate through feature extractor layers
+        for layer in self.feature_extractor:
+            x = layer(x)
+            if return_acts:
+                activations[layer_idx] = x.clone().detach()
+            layer_idx += 1
+
+        # Pass through fully connected layers
+        for layer in self.fc:
+            x = layer(x)
+            if return_acts:
+                activations[layer_idx] = x.clone().detach()
+            layer_idx += 1
+
         if self.use_dueling:
+            # Pass through value stream
             value = self.value_stream(x)
+            if return_acts:
+                activations[layer_idx] = value.clone().detach()
+            layer_idx += 1
+
+            # Pass through advantage stream
             advantage = self.advantage_stream(x)
+            if return_acts:
+                activations[layer_idx] = advantage.clone().detach()
+            layer_idx += 1
+
             # Combine value and advantage streams to get final Q-values
             q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
-            return q_values
         else:
-            return self.output(x)
+            # Standard DQN: Single output stream
+            q_values = self.output(x)
+            if return_acts:
+                activations[layer_idx] = q_values.clone().detach()
+            layer_idx += 1
+
+        if return_acts:
+            return q_values, activations
+        return q_values
 
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)

@@ -18,17 +18,16 @@ if __name__ == '__main__':
     parser.add_argument('--model_path', type=str, help='Path to the model file', default='runs/20240317-112025/model_10000000.pt')
     args = parser.parse_args()
 
-    """
-    model_path = args.model_path
-    model = DQN(input_channels=1, use_dueling=False)
-    model.load_state_dict(torch.load(model_path))
+    load_path = "models/qrunner_dqn_20241106_114947.pth"
+    model_weights = torch.load(load_path, weights_only=True)
+    model = DQN(use_dueling=False)
+    model.load_state_dict(model_weights)
     model.eval()
-    """
     
     env = QrunnerWrapper(
         QrunnerEnv(),
         max_steps=1000,
-        max_steps_reward=150,
+        max_steps_reward=50,
         blending_alpha=0.7,
         frame_skip=4,
         use_grayscale=False
@@ -45,5 +44,8 @@ if __name__ == '__main__':
             action = q_values.argmax(dim=1).item()
 
         obs, reward, terminated, truncated, info = env.step(action)
+        if terminated or truncated:
+            obs, info = env.reset()
+
     env.save_data()
     env.close()

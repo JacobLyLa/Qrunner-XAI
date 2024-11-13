@@ -24,7 +24,7 @@ def get_default_hyperparams():
         "batch_size": 64,
         "train_frequency": 5,
         "target_model_frequency": 2000,
-        "total_timesteps": 1_000_000,
+        "total_timesteps": 10_000_000,
         "learning_starts_fraction": 0.01,
         "duration_eps_fraction": 0.3,
         "buffer_size": 500_000,
@@ -43,7 +43,7 @@ def get_default_hyperparams():
 def train(hyperparams):
     log_interval = 1000
     time_limit = 60 * 60 * 2 # 2 hour
-    eval_episodes = 1000
+    eval_episodes = 100
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
@@ -126,6 +126,10 @@ def train(hyperparams):
                 
                 # Calculate loss
                 loss = mse_loss(td_targets, current_values)
+                
+                # Add l2 regularization
+                l2_loss = sum(torch.norm(p) for p in model.parameters())
+                loss += 0.00001 * l2_loss
 
                 # Optimize the model
                 optimizer.zero_grad()
