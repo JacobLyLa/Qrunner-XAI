@@ -92,7 +92,11 @@ concept_instances = [
   
    	Concept(name="visible good low coin", binary=True,
 	concept_function=lambda state_variables:
-	state_variables['visible good low coin'])]
+	state_variables['visible good low coin']),
+    
+    Concept(name="visible ghost", binary=True,
+	concept_function=lambda state_variables:
+	state_variables['visible ghost'])]
 
 concept_instances = {concept.name: concept for concept in concept_instances}
 

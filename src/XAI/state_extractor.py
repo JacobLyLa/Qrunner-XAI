@@ -54,6 +54,8 @@ class StateExtractorWrapper(gym.Wrapper):
         self.state_variables['visible red coins'] = len([e for e in visible_events if type(e).__name__ == 'Coin' and e.coin_type == 'red'])
         self.state_variables['visible good events'] = self.state_variables['visible blue coins'] + self.state_variables['visible gold coins']
         self.state_variables['visible bad events'] = self.state_variables['visible red coins'] + self.state_variables['visible lava'] + self.state_variables['visible bullets']
+        self.state_variables['visible ghosts'] = len([e for e in visible_events if type(e).__name__ == 'Ghost'])
+        self.state_variables['visible ghost'] = self.state_variables['visible ghosts'] > 0
 
         # Calculate wall area
         self.state_variables['total wall area'] = 0

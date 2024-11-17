@@ -503,3 +503,50 @@ class Portal(Event): # Probably make imune for 50 frames something
         pygame.draw.rect(window, self.ENTRY_COLOR, (self.x - offset, self.y, self.WIDTH, self.HEIGHT))
         # Exit portal
         pygame.draw.rect(window, self.EXIT_COLOR, (self.exit_x - offset, self.exit_y, self.WIDTH, self.HEIGHT))
+
+class Ghost(Event):
+    COLOR = (200, 200, 255)  # Light blue color for the ghost
+    WEIGHT = 5  # Adjust the weight as needed for spawn frequency
+    PUNISHMENT_PER_FRAME = 0.02  # Small punishment applied each frame
+
+    def __init__(self, game):
+        super().__init__(game)
+        self.generate()
+
+    def generate(self):
+        s = self.game.GAME_SIZE
+        self.width = 20  # Width of the ghost
+        self.height = 20  # Height of the ghost
+        # Position at the center of the screen
+        self.x = self.game.camera_offset_x + (s) - (self.width // 2)
+        self.y = (s // 2) - (self.height // 2)
+        # Ensure the ghost doesn't overlap with other walls or objects
+        for event in self.game.active_events:
+            if isinstance(event, Ghost):
+                # Prevent multiple ghosts
+                self.fail = True
+                return
+
+    def frame_update_remove(self):
+        # Apply punishment to the player
+        self.game.player.score -= self.PUNISHMENT_PER_FRAME
+        
+        # Remove ghost if it is outside of screen
+        if self.x < self.game.camera_offset_x - self.width:
+            self.game.player.score -= self.PUNISHMENT_PER_FRAME * 200
+            return True
+
+        # Check if the player has moved to the left part of the screen
+        left_threshold = self.game.camera_offset_x
+        if self.game.player.x <= left_threshold:
+            return True  # Remove the ghost
+        return False  # Keep the ghost active
+
+    def draw(self, window, offset):
+        # Draw the ghost as a simple rectangle or a more elaborate sprite
+        pygame.draw.ellipse(window, self.COLOR, (self.x - offset, self.y, self.width, self.height))
+        # Optionally, add eyes or other features to make the ghost recognizable
+        eye_radius = 3
+        eye_y_offset = self.height // 4
+        pygame.draw.circle(window, (0, 0, 0), (self.x - offset + self.width // 3, self.y + eye_y_offset), eye_radius)
+        pygame.draw.circle(window, (0, 0, 0), (self.x - offset + 2 * self.width // 3, self.y + eye_y_offset), eye_radius)

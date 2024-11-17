@@ -28,7 +28,7 @@ class QNetwork(nn.Module):
         )
 
         if model_path is not None:
-            self.load_state_dict(torch.load(model_path))
+            self.load_state_dict(torch.load(model_path, weights_only=True))
             parts = model_path.split("/")
             run_id = parts[1]
             model_part = parts[2].split("_")[1].split(".")[0]

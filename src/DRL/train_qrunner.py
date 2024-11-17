@@ -81,17 +81,17 @@ def get_default_hyperparams():
     return {
         "gamma": 0.95,
         "tau": 1.0,
-        "learning_rate": 0.0001,
+        "learning_rate": 0.00005,
         "target_network_frequency": 2000,
         "batch_size": 64,
-        "train_frequency": 4,
-        "total_timesteps": 5_000_000, # 10m
-        "learning_starts": 1000,
+        "train_frequency": 5,
+        "total_timesteps": 2_000_000, # 10m
+        "learning_starts": 10000,
         "buffer_size": 500_000,
-        "start_eps": 0.5, # 1
-        "end_eps": 0.05,
-        "duration_eps": 500_000,
-        "frame_skip": 5,
+        "start_eps": 1.0, # 1
+        "end_eps": 0.01,
+        "duration_eps": 300_000,
+        "frame_skip": 4,
     }
 
 if __name__ == "__main__":
@@ -155,9 +155,9 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
-    #q_network = QNetwork().to(device)
+    q_network = QNetwork().to(device)
     #q_network = QNetwork(model_path="runs/20240416-095130/model_9999000.pt").to(device)
-    q_network = QNetwork(model_path="runs/20240417-104259/model_4999000.pt").to(device)
+    #q_network = QNetwork(model_path="runs/20240417-104259/model_4999000.pt").to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=hyperparams['learning_rate'])
     target_network = QNetwork().to(device)
     target_network.load_state_dict(q_network.state_dict())

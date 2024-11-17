@@ -13,3 +13,9 @@ venv/
 .venv/
 *.txt
 *.zip
+*.yaml
+*.pth
+*.log
+*.wandb
+*.csv
+latest-run

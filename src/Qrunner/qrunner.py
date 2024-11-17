@@ -8,7 +8,7 @@ import numpy as np
 import pygame
 from gymnasium import spaces
 
-from src.Qrunner.event import Bullet, Coin, Lava, Portal, Shuriken, Star, Wall
+from src.Qrunner.event import Bullet, Coin, Lava, Portal, Shuriken, Star, Wall, Ghost
 from src.Qrunner.player import Player
 
 
@@ -29,7 +29,7 @@ class QrunnerEnv(gym.Env):
         self.camera_lock_x = self.GAME_SIZE // 3
         self.ground_color = (40, 200, 20)
         self.sky_color = (135, 206, 235)
-        self.available_events = [Bullet, Coin, Lava, Wall]
+        self.available_events = [Bullet, Coin, Lava, Wall, Ghost]
         self.event_weights = [event.WEIGHT for event in self.available_events]
         
         # Player constants
@@ -275,14 +275,29 @@ class QrunnerEnv(gym.Env):
             # Latter actions override former actions
             action = 0
             keys = pygame.key.get_pressed()
+            wanted_actions = []
             if keys[pygame.K_a]:
-                action = 1
+                wanted_actions.append(1)
             if keys[pygame.K_d]:
-                action = 2
+                wanted_actions.append(2)
             if keys[pygame.K_SPACE]:
-                action = 3
+                wanted_actions.append(3)
             if keys[pygame.K_s]:
+                wanted_actions.append(4)
+                
+            ### jump has priority over everything unless in air
+            if 3 in wanted_actions:
+                if not self.player.jumping:
+                    action = 3
+            elif 4 in wanted_actions:
                 action = 4
+            elif 1 in wanted_actions and 2 in wanted_actions:
+                action = 0
+            elif 1 in wanted_actions:
+                action = 1
+            elif 2 in wanted_actions:
+                action = 2
+                
             observation, reward, terminated, truncated, info = self.step(action)
 
             surface = pygame.surfarray.make_surface(observation.transpose(1, 0, 2))
