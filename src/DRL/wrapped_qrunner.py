@@ -250,7 +250,7 @@ class RenderWrapper(gym.Wrapper):
 
         return final_obs
 
-def wrapped_qrunner_env(frame_skip, max_steps=5000, max_steps_no_reward=50, human_render=False, render_salient=False, plot_q=False, record_video=False, scale=8, original=True):
+def wrapped_qrunner_env(frame_skip, max_steps=5000, max_steps_no_reward=50, human_render=False, render_salient=False, plot_q=False, record_video=False, scale=8, original=True, auto_reset=True):
     # If salient or plot q is true, then assert that human render is also true
     assert not (render_salient or plot_q) or human_render
     if original:
@@ -268,7 +268,8 @@ def wrapped_qrunner_env(frame_skip, max_steps=5000, max_steps_no_reward=50, huma
     env = LimitEnv(env, max_steps=max_steps, max_steps_no_reward=max_steps_no_reward)
     env = FrameBlending(env)
     
-    env = gym.wrappers.AutoResetWrapper(env)
+    if auto_reset:
+        env = gym.wrappers.AutoResetWrapper(env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
     return env
 

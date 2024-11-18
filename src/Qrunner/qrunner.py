@@ -29,7 +29,8 @@ class QrunnerEnv(gym.Env):
         self.camera_lock_x = self.GAME_SIZE // 3
         self.ground_color = (40, 200, 20)
         self.sky_color = (135, 206, 235)
-        self.available_events = [Bullet, Coin, Lava, Wall, Ghost]
+        #self.available_events = [Bullet, Coin, Lava, Wall, Ghost]
+        self.available_events = [Coin, Wall, Lava]
         self.event_weights = [event.WEIGHT for event in self.available_events]
         
         # Player constants
