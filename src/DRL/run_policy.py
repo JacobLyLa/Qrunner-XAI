@@ -173,7 +173,7 @@ def main():
     #standard_path = "runs/20240317-112025/model_10000000.pt"
     #standard_path = "runs/20240322-100656/model_5000000.pt"
     #standard_path = "runs/20241113-152659/model_990000.pt"
-    standard_path = "runs/20241115-155355/model_990000.pt"
+    standard_path = "runs/20241115-172401/model_1990000.pt"
     # 2025 E
     # 3500 E->E'
     # 0656 E->E'->E
